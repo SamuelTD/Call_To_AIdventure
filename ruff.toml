@@ -1,0 +1,50 @@
+[tool.ruff]
+# Core settings
+line-length      = 88                    # Matches Black’s default line length :contentReference[oaicite:0]{index=0}
+indent-width     = 4                     # PEP 8 standard indentation
+target-version   = "py311"               # Opt into Python 3.11+ syntax rewrites
+select           = ["E", "F"]            # Enable all pycodestyle errors (E) and Pyflakes (F) :contentReference[oaicite:1]{index=1}
+extend-select    = [
+  "B",   # flake8-bugbear (likely bugs & design problems)
+  "C",   # complexity (mccabe/C901) & flake8-comprehensions
+  "COM", # flake8-commas (trailing commas)
+  "Q",   # flake8-quotes (quote‐style consistency)
+  "ANN", # flake8-annotations (type hints)
+  "S",   # flake8-bandit (security)
+  "I",   # flake8-import-conventions (aliases & banned‐from) :contentReference[oaicite:2]{index=2}
+]
+
+# Avoid conflicts with Black:
+ignore           = ["E203", "W503"]      # ignore whitespace before ':' & line‐break‐before‐operator :contentReference[oaicite:3]{index=3}
+
+# Exclude common non-code directories
+exclude = [
+  ".git",
+  ".hg",
+  ".svn",
+  "__pycache__",
+  ".mypy_cache",
+  ".pytest_cache",
+  ".ruff_cache",
+  "build",
+  "dist",
+  "venv",
+  ".venv",
+]
+
+# Per-file overrides
+per-file-ignores = {
+  "__init__.py"  = ["F401"],              # allow re-exports
+  "tests/*.py"   = ["S101", "T001"],      # allow asserts & prints in tests
+}
+
+# Complexity threshold
+[tool.ruff.mccabe]
+max-complexity = 10                       # flag overly complex functions :contentReference[oaicite:4]{index=4}
+
+# Custom import-alias conventions
+[tool.ruff.lint.flake8-import-conventions.aliases]
+numpy             = "np"
+pandas            = "pd"
+matplotlib.pyplot = "plt"
+seaborn           = "sns"

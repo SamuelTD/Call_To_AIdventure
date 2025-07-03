@@ -1,0 +1,4 @@
+ruff
+gradio
+chromadb
+transformers
