@@ -1,0 +1,68 @@
+{
+  "id": "lulu_the_wise",
+  "type": "character",
+  "name": "Lulu the Wise",
+  "title": "Royal Librarian of Ravenhold",
+  "age": 37,
+  "race": "Human",
+  "description": "A quick-witted, sarcastic archivist with keen grey eyes framed by wire-rimmed spectacles and a tousled mop of chestnut hair. Draped in a robe stitched with protective runes, she carries an ever-present satchel of scrolls and quills. Though she appears reserved, her sharp tongue and encyclopedic knowledge belie a deep devotion to preserving history.",
+  "background": {
+    "lineage": [
+      "Daughter of Master Scribe Aldren of the Ravenhold Archives",
+      "Grandniece of Sorceress Myrilla the Lorekeeper"
+    ],
+    "notable_events": [
+      {
+        "year": 998,
+        "event": "Discovered the Lost Codex of Azharoth beneath the Old Library ruins"
+      },
+      {
+        "year": 1003,
+        "event": "Deciphered the Starfall Prophecy, averting the Moon Eclipse crisis"
+      }
+    ]
+  },
+  "personality_traits": [
+    "Sassy",
+    "Dry humor",
+    "Voracious reader",
+    "Inexhaustibly curious",
+    "Patient with tomes, impatient with fools"
+  ],
+  "relationships": {
+    "allies": [
+      "archmage_selene_starglade",
+      "scribe_traelis_of_silverquill",
+      "duchess_amelia_of_winterfall"
+    ],
+    "enemies": [
+      "book_thief_calyx_shadowhand",
+      "necromancer_calzir_the_void"
+    ]
+  },
+  "current_location": "ravenhold_grand_library",
+  "inventory": [
+    {
+      "item_id": "everink_pen",
+      "name": "Everink Quill",
+      "description": "A feather quill enchanted to never run dry, perfect for hours of transcription."
+    },
+    {
+      "item_id": "codex_of_whispers",
+      "name": "Codex of Whispers",
+      "description": "An ancient book bound in midnight-blue leather that softly murmurs forgotten secrets."
+    },
+    {
+      "item_id": "rune-etched_spectacles",
+      "name": "Rune-Etched Spectacles",
+      "description": "Glasses inscribed with clarity runes, granting the wearer perfect focus on any script."
+    }
+  ],
+  "tags": [
+    "librarian",
+    "npc",
+    "sarcasm",
+    "scholar",
+    "keeper_of_secrets"
+  ]
+}
