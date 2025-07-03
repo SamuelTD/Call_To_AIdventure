@@ -1,0 +1,48 @@
+{
+  "id": "gron_thunderfist",
+  "type": "character",
+  "name": "Gron Thunderfist",
+  "title": "The Iron Fist of Stormhold",
+  "age": 38,
+  "race": "Half-Orc",
+  "description": "A broad-shouldered half-orc standing over six feet tall, with ash-gray skin and pale green eyes. His shaved head bears a single scar, and his booming voice carries the weight of his many battles.",
+  "background": {
+    "lineage": [
+      "Son of Grulok the Wanderer",
+      "Raised in the human militia of Stormhold"
+    ],
+    "notable_events": [
+      {
+        "year": 995,
+        "event": "Held back a goblin horde at the Bridge of Ash during the Night of Cinders"
+      },
+      {
+        "year": 1005,
+        "event": "Completed a solo contract to eliminate the Redfang Pirates"
+      }
+    ]
+  },
+  "personality_traits": [
+    "Taciturn and stoic",
+    "Unwavering sense of honor",
+    "Quick to defend the weak"
+  ],
+  "relationships": {
+    "allies": ["duchess_amelia_of_winterfall", "sister_briala_of_stormhold"],
+    "enemies": ["brigand_leader_kelgar", "shadow_assassin_xyra"]
+  },
+  "current_location": "stormhold_keep",
+  "inventory": [
+    {
+      "item_id": "greatsword_stormcleaver",
+      "name": "Stormcleaver",
+      "description": "A massive two-handed greatsword rumored to crack like thunder when swung."
+    },
+    {
+      "item_id": "trophy_redfang_pendant",
+      "name": "Pendant of the Defeated",
+      "description": "A red crystal pendant taken from the leader of the Redfang Pirates as proof of victory."
+    }
+  ],
+  "tags": ["mercenary", "half-orc", "warrior"]
+}

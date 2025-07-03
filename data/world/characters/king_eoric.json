@@ -1,0 +1,48 @@
+{
+  "id": "king_eoric",
+  "type": "character",
+  "name": "King Eoric",
+  "title": "The Lion of Starlight",
+  "age": 62,
+  "race": "Human",
+  "description": "A tall, broad-shouldered monarch with silver-streaked black hair and piercing amber eyes. Known for his booming voice, judicious rulings, and the golden crown embossed with a rising sun.",
+  "background": {
+    "lineage": [
+      "Descendant of the Sunforge dynasty",
+      "Son of Queen Aveline the Just"
+    ],
+    "notable_events": [
+      {
+        "year": 960,
+        "event": "Defended the northern passes from the Frost Legion"
+      },
+      {
+        "year": 975,
+        "event": "Negotiated the Treaty of Silvermarsh with the Elven Court"
+      }
+    ]
+  },
+  "personality_traits": [
+    "Fair-minded",
+    "Stubborn in council",
+    "Warm to children and smallfolk"
+  ],
+  "relationships": {
+    "allies": ["elven_ambassador_thrindel", "duke_harald_of_ashwood"],
+    "enemies": ["lord_vaeron_of_obscura"]
+  },
+  "current_location": "capital_city_ravenhold",
+  "inventory": [
+    {
+      "item_id": "crown_of_sunrise",
+      "name": "Crown of Sunrise",
+      "description": "A ceremonial crown said to bless the wearer with the sun’s favor."
+    },
+    {
+      "item_id": "gilded_sword",
+      "name": "Gilded Sword",
+      "description": "A longsword with a sunburst guard, often carried in processions."
+    }
+  ],
+  "tags": ["monarch", "noble", "stoic"]
+}
