@@ -2,12 +2,15 @@
 
 import os
 import chromadb
-from langchain_ollama import OllamaEmbeddings, ChatOllama
+from langchain_ollama import OllamaEmbeddings
 from langchain_chroma import Chroma
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
-
+from langchain.chains.llm import LLMChain
+from utils.python_utils import clear
+from utils.player import Player, save_player, load_player
+from combat.core import run_combat
+from langchain_groq import ChatGroq
+from langchain.agents import Tool, initialize_agent, AgentType
 
 # Chroma collections
 CHAR_COL = "characters"
@@ -48,60 +51,129 @@ char_retriever = vectorstore_char.as_retriever(search_kwargs={"k": 5, "filter": 
 
 loc_retriever = vectorstore_loc.as_retriever(search_kwargs={"k": 3})
 
+
 # Model with OLLAMA
-<<<<<<< HEAD
-llm = ChatOllama(model=LLM_MODEL)
-=======
 # llm = ChatOllama(model=LLM_MODEL)
 llm = ChatGroq(api_key=os.getenv("GROQ_API_KEY"), model="llama-3.3-70b-versatile")
 
 # Memory
 history = []
->>>>>>> d1bb64d (fix : removed GROQ API KEY FROM CODE)
 
 # Prompt Template
 
-template = """
-{lulu}
+template = ChatPromptTemplate.from_template("{full_prompt}")
 
-Now, using those scrolls *and* the following additional world‐lore:
 
-{context_char}
-{context_loc}
+chain = LLMChain(
+    llm=llm,
+    prompt=template
+)
 
-Answer with Lulu’s trademark sass…
+history = []
+player = None    
+story_steps = 0
 
-Question: {question}
-"""
 
-prompt = ChatPromptTemplate.from_template(template)
+def combat_tool(enemy: str) -> str:
+    result = run_combat(enemy,player)
+    return result
 
-# RAG chain
+def nothing_tool(target: str) -> str:
+    return ""
 
-rag_chain = (
-    {"lulu": lulu_retriever, "context_char": char_retriever, "context_loc": loc_retriever, "question": RunnablePassthrough()} # Étape de recherche (Retrieval)
-    | prompt                                                  # Étape d'augmentation (Augmented)
-    | llm                                                     # Étape de génération (Generation)
-    | StrOutputParser()                                       # Parse la sortie du LLM en chaîne de caractères
+tools = [
+    Tool(
+      name="combat",
+      func=combat_tool,
+      description="Call when combat should start against a monster or a creature; arg: enemy name."
+    ),
+     Tool(
+      name="nothing",
+      func=nothing_tool,
+      description="Call when no combat should start. Then exit and do not call any other tool or function. Do not return anything."
+    )
+]
+
+agent = initialize_agent(
+    tools, llm, agent_type="openai-tools-agent", verbose=True, max_iterations=1, early_stopping_method="generate"
 )
 
 # Main loop
 
 if __name__ == "__main__":
    
-    # doc = retriever.get_relevant_documents(user_question)
-    # print("Retrieved chunks: ", doc)
-    
-    print("\n--- Game Master v0.1 ---")
-    print("Ask question about a known character.")
+#    character_creation_step = 0
+   loop_step = 0
+   
+   while True:
+    match loop_step:
+        case 0:
+            print("Welcome to Call to AIdventure. What do you wish to do?")
+            print("1. Character creation (type 1)")
+            print("2. Play (type 2)")
+            q = input("Type 1 or 2 : ")
+            if q == "1":
+                loop_step = 1
+                clear()
+            elif q == "2":
+                loop_step = 2
+                clear()
+            else:
+                clear()
+                print("Please enter a valid value.\n\n")
+        case 1:            
+            name = input("What is your name? ")
+            player_class = input("What is your class? ")
+            race = input("What is your race? ")
+            gold = int(input("How much gold do you have? "))
+            player = Player(name=name, race=race, p_class=player_class, gold=gold)
+            save_player(player)
+            clear()
+            print("Uploading data, please wait...")
+            loop_step = 2
+            clear()
+        case 2:  #Main LLM Loop
+            if player == None:
+                player = load_player()    
+            player_summary = (f"Name : {player.name} - Race : {player.race} - Job : {player.p_class}")
+            
+            if story_steps == 0 :
+                with open("data/documents/intro2.txt", "r") as file:
+                    intro = file.read()
+                print(intro)                
+                history.append(intro)
+            
+            q = input("You : ")
+            if q.lower()=="exit": 
+                print("Farewell, adventurer.")
+                break
+            
+            chat_hist = "\n".join(history)
+            
+            answer = agent.invoke({"input": f"{chat_hist}\nPlayer: {q}"})
+            
+            full_prompt = f"""
+            Here are the information on the user :
+            {player_summary}
+            
+            Here is the adventure so far:
+            {chat_hist}
 
-    
-    while True:
-        user_question = input("\nYou: ")
-        if user_question.lower() == "exit":
-            break
+            You are the Game Master for a narrative adventure game. You take the user input and continue the story\
+                based on the events so far and the user input. You use a refined, fantasy inspired tone to craft the story.\
+                     You write in the second person and conclude every message by "Now, what do you do?".\
+                          Limit each of your answer to six sentences maximum.
 
-        print("Assistant: ...")
-        # Invoque la chaîne RAG avec la question de l'utilisateur
-        answer = rag_chain.invoke(user_question)
-        print(f"\rAssistant: {answer}")
+            User input: {q}
+            """
+            
+
+            # 4) Invoke the chain *once*
+            answer = chain.predict(full_prompt=full_prompt)
+            print("Story:", answer,"\n\n")
+
+            # 5) Update history
+            history.append(f"You: {q}")
+            history.append(f"Story: {answer}")
+            
+            story_steps += 1

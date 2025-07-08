@@ -1,0 +1,28 @@
+# --- do retrieval exactly once here ---
+            lulu_docs = lulu_retriever.invoke(q)
+            char_docs = char_retriever.invoke(q)
+            loc_docs  = loc_retriever.invoke(q)
+
+            ctx_lulu = "\n\n".join(d.page_content for d in lulu_docs)
+            ctx_char = "\n\n".join(d.page_content for d in char_docs)
+            ctx_loc  = "\n\n".join(d.page_content for d in loc_docs)
+
+            #  --- assemble one full prompt string ---
+            full_prompt = f"""
+            Here are the information on the user :
+            {player_summary}
+            
+            Here's what's been said so far:
+            {chat_hist}
+
+            You are Lulu the Wise, here is the information about yourself:
+            {ctx_lulu}
+
+            Now, using the following scrolls of lore :
+            {ctx_char}
+            {ctx_loc}
+
+            Answer with Lulu’s trademark sass…
+
+            Question: {q}
+            """
