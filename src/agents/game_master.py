@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import dotenv
 import chromadb
 from langchain_ollama import OllamaEmbeddings
 from langchain_chroma import Chroma
@@ -11,6 +12,8 @@ from utils.player import Player, save_player, load_player
 from combat.core import run_combat
 from langchain_groq import ChatGroq
 from langchain.agents import Tool, initialize_agent, AgentType
+
+dotenv.load_dotenv()
 
 # Chroma collections
 CHAR_COL = "characters"
@@ -54,6 +57,7 @@ loc_retriever = vectorstore_loc.as_retriever(search_kwargs={"k": 3})
 
 # Model with OLLAMA
 # llm = ChatOllama(model=LLM_MODEL)
+
 llm = ChatGroq(api_key=os.getenv("GROQ_API_KEY"), model="llama-3.3-70b-versatile")
 
 # Memory
