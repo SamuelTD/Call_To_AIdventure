@@ -10,6 +10,7 @@ class Player(BaseModel):
     gold: int
     hp: int = Field(default=10)
     xp: int = Field(default=0)
+    gender: str = Field(default="male")
 
 file_path = "data/world/other/player.json"
 

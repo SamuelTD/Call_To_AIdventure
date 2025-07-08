@@ -3,6 +3,7 @@
 import os
 import dotenv
 import chromadb
+import json
 from langchain_ollama import OllamaEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.prompts import ChatPromptTemplate
@@ -79,11 +80,10 @@ story_steps = 0
 
 
 def combat_tool(enemy: str) -> str:
-    result = run_combat(enemy,player)
-    return result
+    return json.dumps({"action":"combat","enemy":enemy})
 
 def nothing_tool(target: str) -> str:
-    return ""
+    return json.dumps({"action":"continue"})
 
 tools = [
     Tool(
@@ -94,7 +94,7 @@ tools = [
      Tool(
       name="nothing",
       func=nothing_tool,
-      description="Call when no combat should start. Then exit and do not call any other tool or function. Do not return anything."
+      description="Call when no combat should start. Then exit and do not call any other tool or function."
     )
 ]
 
@@ -125,7 +125,7 @@ if __name__ == "__main__":
             else:
                 clear()
                 print("Please enter a valid value.\n\n")
-        case 1:            
+        case 1: #Character creation         
             name = input("What is your name? ")
             player_class = input("What is your class? ")
             race = input("What is your race? ")
@@ -154,30 +154,35 @@ if __name__ == "__main__":
             
             chat_hist = "\n".join(history)
             
-            answer = agent.invoke({"input": f"{chat_hist}\nPlayer: {q}"})
+            decision = agent.invoke({"input": f"{chat_hist}\nPlayer: {q}"})
+            cmd = json.loads(decision)
             
-            full_prompt = f"""
-            Here are the information on the user :
-            {player_summary}
+            if cmd["action"] == "combat":
+                pass
             
-            Here is the adventure so far:
-            {chat_hist}
+            elif cmd["action"] == "continue":            
+                full_prompt = f"""
+                Here are the informations on the user :
+                {player_summary}
+                
+                Here is the adventure so far:
+                {chat_hist}
 
-            You are the Game Master for a narrative adventure game. You take the user input and continue the story\
-                based on the events so far and the user input. You use a refined, fantasy inspired tone to craft the story.\
-                     You write in the second person and conclude every message by "Now, what do you do?".\
-                          Limit each of your answer to six sentences maximum.
+                You are the Game Master for a narrative adventure game. You take the user input and continue the story\
+                    based on the events so far and the user input. You use a refined, fantasy inspired tone to craft the story.\
+                        You write in the second person and conclude every message by "Now, what do you do?".\
+                            Limit each of your answer to six sentences maximum.
 
-            User input: {q}
-            """
-            
+                User input: {q}
+                """
+                
 
-            # 4) Invoke the chain *once*
-            answer = chain.predict(full_prompt=full_prompt)
-            print("Story:", answer,"\n\n")
+                # 4) Invoke the chain *once*
+                answer = chain.predict(full_prompt=full_prompt)
+                print("Story:", answer,"\n\n")
 
-            # 5) Update history
-            history.append(f"You: {q}")
-            history.append(f"Story: {answer}")
-            
-            story_steps += 1
+                # 5) Update history
+                history.append(f"You: {q}")
+                history.append(f"Story: {answer}")
+                
+                story_steps += 1

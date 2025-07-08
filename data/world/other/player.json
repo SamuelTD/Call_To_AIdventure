@@ -4,5 +4,6 @@
   "p_class": "wizard",
   "gold": 500,
   "hp": 10,
-  "xp": 0
+  "xp": 0,
+  "gender": "male"
 }
