@@ -1,7 +1,6 @@
 from retrieval.chunker import chunk_player_json_file
 from retrieval.client import upsert_chunks
 from retrieval.embedder import embed
-import os
 
 
 # DEPRECATED

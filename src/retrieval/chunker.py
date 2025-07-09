@@ -30,7 +30,7 @@ def chunk_character_json_file(path: str, max_words: int = 300) -> List[Dict[str,
     pieces: List[str] = []
 
     # 1. Basic identifiers & flavor
-    print(f"[chunk_json_file] Extracting basic fields...")
+    print("[chunk_json_file] Extracting basic fields...")
     for fld in ("name", "title", "race", "age"):
         if data.get(fld):
             pieces.append(str(data[fld]))
@@ -117,7 +117,7 @@ def chunk_location_json_file(path: str, max_words: int = 300) -> List[Dict[str, 
     pieces: List[str] = []
 
     # Basic identifiers
-    print(f"[chunk_location_json_file] Extracting basic fields...")
+    print("[chunk_location_json_file] Extracting basic fields...")
     for fld in ("name", "region", "type"):
         if data.get(fld):
             pieces.append(str(data.get(fld)))

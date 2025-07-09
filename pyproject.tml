@@ -33,10 +33,7 @@ exclude = [
 ]
 
 # Per-file overrides
-per-file-ignores = {
-  "__init__.py"  = ["F401"],              # allow re-exports
-  "tests/*.py"   = ["S101", "T001"],      # allow asserts & prints in tests
-}
+per-file-ignores = {"__init__.py"  = ["F401"], "tests/*.py"   = ["S101", "T001"]}
 
 # Complexity threshold
 [tool.ruff.mccabe]

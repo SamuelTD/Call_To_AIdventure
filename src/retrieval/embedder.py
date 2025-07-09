@@ -36,7 +36,7 @@ def embed(text: str) -> List[float]:
 
     embedding = data["data"][0].get("embedding")
     if not embedding:
-        print(f"[embed] Embedding field missing in response data")
+        print("[embed] Embedding field missing in response data")
         raise ValueError("Embedding missing in response")
 
     print(f"[embed] Received embedding vector of length {len(embedding)}")

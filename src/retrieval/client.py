@@ -1,7 +1,5 @@
-import os
 from typing import List, Dict, Any, Optional
 import chromadb
-from chromadb.config import Settings
 from chromadb.api.models.Collection import Collection
 from chromadb.errors import NotFoundError
 

@@ -13,6 +13,8 @@ from utils.player import Player, save_player, load_player
 from combat.core import run_combat
 from langchain_groq import ChatGroq
 from langchain.agents import Tool, initialize_agent, AgentType
+import state
+
 
 dotenv.load_dotenv()
 
@@ -74,16 +76,17 @@ chain = LLMChain(
     prompt=template
 )
 
-history = []
 player = None    
 story_steps = 0
 
-
 def combat_tool(enemy: str) -> str:
-    return json.dumps({"action":"combat","enemy":enemy})
+    state.last_decision = json.dumps({"action":"combat","enemy":enemy})
+    state.enemy_name = enemy
+    return ""
 
 def nothing_tool(target: str) -> str:
-    return json.dumps({"action":"continue"})
+    agent_report = json.dumps({"action":"continue"})
+    return ""
 
 tools = [
     Tool(
@@ -94,12 +97,13 @@ tools = [
      Tool(
       name="nothing",
       func=nothing_tool,
-      description="Call when no combat should start. Then exit and do not call any other tool or function."
+      description="Call when no combat should start, and then stop. Returns an empty string."
     )
 ]
 
 agent = initialize_agent(
-    tools, llm, agent_type="openai-tools-agent", verbose=True, max_iterations=1, early_stopping_method="generate"
+    tools, llm, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, verbose=True, max_iterations=1,
+    early_stopping_method="generate"
 )
 
 # Main loop
@@ -155,10 +159,29 @@ if __name__ == "__main__":
             chat_hist = "\n".join(history)
             
             decision = agent.invoke({"input": f"{chat_hist}\nPlayer: {q}"})
-            cmd = json.loads(decision)
+            cmd = json.loads(state.last_decision)
             
             if cmd["action"] == "combat":
-                pass
+                combat_result = run_combat(cmd["enemy"], player)
+                if combat_result["signal"] == 2:
+                    print(combat_result["message"])
+                    break
+                else:
+                    full_prompt = f"""
+                    Here are the informations on the user :
+                    {player_summary}
+                    
+                    Here is the adventure so far:
+                    {chat_hist}
+
+                    You are the Game Master for a narrative adventure game. You take the user input and continue the story\
+                        based on the events so far and the user input. You use a refined, fantasy inspired tone to craft the story.\
+                            You write in the second person and conclude every message by "Now, what do you do?".\
+                                Limit each of your answer to six sentences maximum. The user juste vanquished {state.enemy_name}.\
+                                    Start your output by "You vanquished {state.enemy_name} and go from there.
+
+                    User input: {q}
+                    """
             
             elif cmd["action"] == "continue":            
                 full_prompt = f"""
@@ -175,14 +198,14 @@ if __name__ == "__main__":
 
                 User input: {q}
                 """
-                
+            
 
-                # 4) Invoke the chain *once*
-                answer = chain.predict(full_prompt=full_prompt)
-                print("Story:", answer,"\n\n")
+            # 4) Invoke the chain *once*
+            answer = chain.predict(full_prompt=full_prompt)
+            print("Story:", answer,"\n\n")
 
-                # 5) Update history
-                history.append(f"You: {q}")
-                history.append(f"Story: {answer}")
-                
-                story_steps += 1
+            # 5) Update history
+            history.append(f"You: {q}")
+            history.append(f"Story: {answer}")
+            
+            story_steps += 1

@@ -1,5 +1,4 @@
-import json
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 import sqlite3
 from typing import Optional
 
@@ -25,7 +24,7 @@ def get_monster(name: str) -> Optional[Monster]:
     Returns None if no monster with that name exists.
     """
     conn = sqlite3.connect(file_path)
-    cur  = conn.execute("SELECT * FROM monsters WHERE name = ?", (name,))
+    cur  = conn.execute("SELECT * FROM monsters WHERE name COLLATE NOCASE = ?", (name,))
     row  = cur.fetchone()
     cols = [col[0] for col in cur.description]
     conn.close()
