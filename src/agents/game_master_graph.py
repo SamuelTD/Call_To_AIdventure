@@ -21,6 +21,7 @@ from utils.player import Player, save_player, load_player
 from combat.core import run_combat
 
 import gradio as gr
+from functools import partial
 
 # --- Configuration constants ---
 CHAR_COL = "characters"
@@ -40,6 +41,7 @@ class GameState(TypedDict, total=False):
     should_end: bool
     current_enemy: str
     current_choices: list[str]
+    current_story: str
 
 # --- Embeddings & Vector Stores ---
 ollama_embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
@@ -93,9 +95,9 @@ summary_chain = LLMChain(llm=llm, prompt=summary_template)
 choicer_template = ChatPromptTemplate.from_template(
     "You are role player in an adventure. Your role is to determine which next courses of action are aceptable based on the current context :"
     "{context}"
-    "You will ONLY output 3 actions using the following schema :"
+    "You will ONLY output EXACTLY three (3) actions using the following schema :"
     "[action1, action2, action3]"
-    "Each action is a single, first person sentence describing the chosen action."
+    "Each action is at maximum 6 words long."
 )
 choicer_chain = LLMChain(llm=llm, prompt=choicer_template)
 
@@ -157,11 +159,11 @@ def character_creation() -> Player:
     clear()
     return player
 
-def load_intro() -> str:
+def load_intro(print: bool) -> str:
     clear()
     with open("data/documents/intro.txt", "r") as f:
         intro = f.read()
-    print(intro)
+    if print: print(intro)
     return intro
 
 
@@ -188,8 +190,12 @@ def step_agent_think(state: GameState) -> GameState:
     hist = "\n".join(state["history"] + [f"Player: {state['latest_user']}"])
     resp = agent.invoke({"messages": [{"role": "user", "content": hist}]})
     print("DEBUG ========== ", resp["messages"][-1].content)
-    tool_msg=json.loads(resp["messages"][-1].content)
-    print("DEBUG ========== ", tool_msg)
+    try:
+        tool_msg=json.loads(resp["messages"][-1].content)
+    except:
+        print("DEBUG ===================== ")
+        print("COULDNT PARSE JSON. FULL RESPONSE : \n", resp)
+        return {"last_cmd": "end", "current_enemy": tool_msg.get("enemy", None)}
     return {"last_cmd": tool_msg.get("action"), "current_enemy": tool_msg.get("enemy", None)}
 
 
@@ -224,7 +230,7 @@ def step_generate_story(state: GameState) -> GameState:
                     You are the Game Master for a narrative adventure game. You take the user input and continue the story\
                         based on the events so far and the user input. You use a refined, fantasy inspired tone to craft the story.\
                             You write in the second person and conclude every message by "Now, what do you do?".\
-                                Limit each of your answer to six sentences maximum. The user juste vanquished {enemy}.\
+                                Limit each of your answer to four sentences maximum. The user juste vanquished {enemy}.\
                                     Start your output by "You vanquished {enemy}" and go from there.
 
                     User input: {q}
@@ -239,14 +245,14 @@ def step_generate_story(state: GameState) -> GameState:
 
                 You are the Game Master for a narrative adventure game. You take the user input and continue the story\
                     based on the events so far and the user input. You use a refined, fantasy inspired tone to craft the story.\
-                        You write in the second person and conclude every message by "Now, what do you do?".\
+                        You write in the second person.\
                             Limit each of your answer to four sentences maximum.
 
                 User input: {q}
                 """
     story = story_chain.predict(full_prompt=prompt)
     print("Story:", story, "\n")
-    return {"history": state["history"] + [f"You: {q}", f"Story: {story}"], "story_steps": state["story_steps"] + 1}
+    return {"history": state["history"] + [f"You: {q}", f"Story: {story}"], "current_story": story, "story_steps": state["story_steps"] + 1}
 
 
 def step_end(state: GameState) -> GameState:
@@ -292,7 +298,7 @@ def build_post_input_graph(builder):
     builder.add_conditional_edges(
         "agent_think",
         lambda s: s.get("last_cmd"),
-        {"combat": "run_combat", "continue": "generate_story"}
+        {"combat": "run_combat", "continue": "generate_story", "end": END}
     )
     # Conditional routing after combat
     builder.add_conditional_edges(
@@ -308,12 +314,40 @@ def build_post_input_graph(builder):
 
     return graph
 
+# region GRADIO
 
+def init(initial_state):
+    # only called once, at app start
+    state = initial_state
+    ctx   = pre_graph.invoke(input=state)
+    state["current_choices"] = ctx["current_choices"]
+    return state["current_story"], gr.update(choices=ctx["current_choices"], value=None), state
+
+def step(choice, state):
+    # 1) drive the “post” graph to update your world‐state
+    state = post_graph.invoke(input={**state, "latest_user": choice})
+    # 2) immediately re‐run the “pre” graph on that new state
+    ctx = pre_graph.invoke(input=state)
+    # 3) extract narrative + next‐choices
+    story = ctx["current_story"]
+    choices = ctx["current_choices"]
+    return story, gr.update(choices=choices, value=None), state
+
+def show_character(state):
+    p = state["player"]
+    player_summary = f"Name: {p.name} \n Gender: {p.gender} \n Race: {p.race} \n Class: {p.p_class} \n Gold: {p.gold} coins"
+    return player_summary, gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), state
+
+def back(state):
+    return state["current_story"], gr.update(visible=True), gr.update(choices=state["current_choices"], value=None, visible=True),\
+        gr.update(visible=True), gr.update(visible=False), state
+
+#region MAIN
 # --- Build & Run StateGraph ---
 if __name__ == "__main__":
     
     player = load_player()
-    intro = load_intro()
+    intro = load_intro(False)
         
     pre_graph = build_pre_input_graph(StateGraph(GameState))
     post_graph = build_post_input_graph(StateGraph(GameState))
@@ -323,31 +357,57 @@ if __name__ == "__main__":
         "history": [intro],
         "story_steps": 0,
         "should_end": False,
-        "combat_result": {"signal": 0, "message": ""}
+        "combat_result": {"signal": 0, "message": ""},
+        "current_story": intro
     }
     
-    while True:
+    init_with_state = partial(init, state)
+    with gr.Blocks() as demo:
+        story_box   = gr.Textbox(label="Call the AIdventure", interactive=False)
+        choice_radio= gr.Radio(label="Your action")
+        submit_btn  = gr.Button("Go")
+        show_char_btn = gr.Button("Character sheet")
+        back_btn = gr.Button("Back", visible=False)
+        state_holder= gr.State()
 
-        ctx = pre_graph.invoke(input=state)
-        print("Chose your next action : ")
-        for x, choice in enumerate(ctx["current_choices"]):
-            print(f"{x+1}. ",choice, "\n")
-        nb_choices = len(ctx["current_choices"])
-        while True:
-            i = input()
-            try:
-                i = int(i)
-                if i <= 0 or nb_choices > nb_choices:
-                    print("Please enter a valide choice.")
-                else:
-                    ctx["latest_user"] = ctx["current_choices"][i-1]
-                    break
-            except:
-                print("Please enter a valide choice.") 
+        demo.load(init_with_state, 
+                outputs=[story_box, choice_radio, state_holder])
+        submit_btn.click(step,
+                        inputs=[choice_radio, state_holder],
+                        outputs=[story_box, choice_radio, state_holder])
         
-        ctx = post_graph.invoke(input=ctx)   
-        print("EXIT ?")
-        if input().lower() == "exit":
-            break
-        state = ctx
+        show_char_btn.click(show_character,
+                            inputs=[state_holder],
+                            outputs=[story_box, submit_btn, choice_radio, show_char_btn, back_btn, state_holder])
+
+        back_btn.click(back,
+                            inputs=[state_holder],
+                            outputs=[story_box, submit_btn, choice_radio, show_char_btn, back_btn, state_holder])
+
+    demo.launch()
+    
+    # while True:
+
+    #     ctx = pre_graph.invoke(input=state)
+    #     print("Chose your next action : ")
+    #     for x, choice in enumerate(ctx["current_choices"]):
+    #         print(f"{x+1}. ",choice, "\n")
+    #     nb_choices = len(ctx["current_choices"])
+    #     while True:
+    #         i = input()
+    #         try:
+    #             i = int(i)
+    #             if i <= 0 or nb_choices > nb_choices:
+    #                 print("Please enter a valide choice.")
+    #             else:
+    #                 ctx["latest_user"] = ctx["current_choices"][i-1]
+    #                 break
+    #         except:
+    #             print("Please enter a valide choice.") 
+        
+    #     ctx = post_graph.invoke(input=ctx)   
+    #     print("EXIT ?")
+    #     if input().lower() == "exit":
+    #         break
+    #     state = ctx
         
