@@ -1,0 +1,24 @@
+{
+  "id": "emerald_sword",
+  "name": "The Emerald Sword",
+  "description": "The king mandated you to venture into the Tomb of Dragonkin in search of the legendary Emerald Sword.",
+  "monsters": [
+    "Zombie",
+    "Kobold Warrior",
+    "Goblin Warrior",
+    "Giant Spider",
+    "Ghoul"
+  ],
+  "npcs": [
+    
+  ],
+  "locations": [
+    
+  ],
+  "items": [
+    
+  ],
+  "tags": [
+    
+  ]
+}

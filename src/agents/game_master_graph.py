@@ -23,6 +23,10 @@ from combat.core import run_combat
 import gradio as gr
 from functools import partial
 
+import random
+
+seed=random.randrange(2**32)
+
 # --- Configuration constants ---
 CHAR_COL = "characters"
 LOC_COL = "locations"
@@ -71,7 +75,7 @@ tools = [
 
 
 #region LLM AND AGENTS
-llm = ChatGroq(api_key=GROQ_API_KEY, model="llama-3.3-70b-versatile")
+llm = ChatGroq(api_key=GROQ_API_KEY, model="llama-3.3-70b-versatile", model_kwargs={"seed": seed})
 
 # --- Agent & Story Chain Setup ---
 agent = create_react_agent(
@@ -363,26 +367,46 @@ if __name__ == "__main__":
     
     init_with_state = partial(init, state)
     with gr.Blocks() as demo:
-        story_box   = gr.Textbox(label="Call the AIdventure", interactive=False)
-        choice_radio= gr.Radio(label="Your action")
-        submit_btn  = gr.Button("Go")
-        show_char_btn = gr.Button("Character sheet")
-        back_btn = gr.Button("Back", visible=False)
-        state_holder= gr.State()
+        with gr.Row():
+            with gr.Column(scale=3):
+                gr.Markdown("### Call to AIdventure")
+                story_box   = gr.Textbox(interactive=False)
+                choice_radio= gr.Radio(label="Your action")
+                submit_btn  = gr.Button("Go")
+                # show_char_btn = gr.Button("Character sheet")
+                # back_btn = gr.Button("Back", visible=False)
+                state_holder= gr.State()
+            with gr.Column(scale=1):
+                gr.Markdown("### Character Sheet")
+                stats_panel = gr.JSON()
 
-        demo.load(init_with_state, 
+        load_proc = demo.load(init_with_state, 
                 outputs=[story_box, choice_radio, state_holder])
-        submit_btn.click(step,
+        
+        load_proc.then(
+            fn=lambda state: state["player"].model_dump(),
+            inputs=[state_holder],
+            outputs=[stats_panel]
+        )
+        
+        
+        submit_action = submit_btn.click(step,
                         inputs=[choice_radio, state_holder],
                         outputs=[story_box, choice_radio, state_holder])
         
-        show_char_btn.click(show_character,
-                            inputs=[state_holder],
-                            outputs=[story_box, submit_btn, choice_radio, show_char_btn, back_btn, state_holder])
+        submit_action.then(
+            fn=lambda state: state["player"].model_dump(),
+            inputs=[state_holder],
+            outputs=[stats_panel]
+        )
+        
+        # show_char_btn.click(show_character,
+        #                     inputs=[state_holder],
+        #                     outputs=[story_box, submit_btn, choice_radio, show_char_btn, back_btn, state_holder])
 
-        back_btn.click(back,
-                            inputs=[state_holder],
-                            outputs=[story_box, submit_btn, choice_radio, show_char_btn, back_btn, state_holder])
+        # back_btn.click(back,
+        #                     inputs=[state_holder],
+        #                     outputs=[story_box, submit_btn, choice_radio, show_char_btn, back_btn, state_holder])
 
     demo.launch()
     

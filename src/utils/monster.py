@@ -1,6 +1,12 @@
 from pydantic import BaseModel
 import sqlite3
 from typing import Optional
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+file_path = os.getenv("DB_PATH")
 
 class Monster(BaseModel):
     
@@ -15,8 +21,6 @@ class Monster(BaseModel):
     wisdom: int
     charisma: int
     description: str
-
-file_path = "db/sqlite/monsters.db"
 
 def get_monster(name: str) -> Optional[Monster]:
     """
