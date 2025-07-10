@@ -18,6 +18,7 @@ from langchain.chains.llm import LLMChain
 
 from utils.python_utils import clear
 from utils.player import Player, save_player, load_player
+from utils.adventure import Adventure, load_adventure
 from combat.core import run_combat
 
 import gradio as gr
@@ -37,6 +38,7 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 # --- Define Graph State Schema ---
 class GameState(TypedDict, total=False):
     player: Player
+    adventure: Adventure
     history: list[str]
     story_steps: int
     latest_user: str
@@ -69,7 +71,7 @@ def nothing_tool(_: str) -> dict:
     return {"action": "continue"}
 
 tools = [
-    Tool(name="combat", func=combat_tool, description="Start combat against enemy ; arg enemy name", return_direct=True),
+    Tool(name="combat", func=combat_tool, description="Start combat against monster ; arg monster name", return_direct=True),
     Tool(name="nothing", func=nothing_tool, description="Continue narrative without combat.", return_direct=True),
 ]
 
@@ -77,16 +79,21 @@ tools = [
 #region LLM AND AGENTS
 llm = ChatGroq(api_key=GROQ_API_KEY, model="llama-3.3-70b-versatile", model_kwargs={"seed": seed})
 
-# --- Agent & Story Chain Setup ---
-agent = create_react_agent(
-    model=llm,
-    tools=tools,
-    prompt="You are the assistant to a fantasy Game Master. \
-        You decide which way the game goes next based on the tools you have and the user input."
-)
 
 template = ChatPromptTemplate.from_template("{full_prompt}")
 story_chain = LLMChain(llm=llm, prompt=template)
+
+think_template = ChatPromptTemplate.from_template(
+        "You are the assistant to a fantasy Game Master. \
+        You decide which way the game goes next based on the tools you have and the user input."
+)
+
+
+thinker_agent = create_react_agent(
+    model=llm,
+    tools=tools,
+    prompt=think_template
+)
 
 summary_template = ChatPromptTemplate.from_template(
     "You are a concise summarizer for fantasy narrative. You write in the past tense, in the third person and replace the 2nd person by \"the player\"."
@@ -163,12 +170,15 @@ def character_creation() -> Player:
     clear()
     return player
 
-def load_intro(print: bool) -> str:
-    clear()
-    with open("data/documents/intro.txt", "r") as f:
+def load_adv(id: str, print: bool) -> str:
+    
+    adv = load_adventure(id)
+    
+    with open(f"data/world/adventures/{id}/intro.txt", "r") as f:
         intro = f.read()
+        
     if print: print(intro)
-    return intro
+    return adv, intro
 
 
 # region STEPS
@@ -178,21 +188,28 @@ def step_get_input(state: GameState) -> GameState:
     if state["story_steps"] > -1:        
         try:
             choices = [item.strip() for item in make_choice(state["history"]).strip("[]").split(", ")]
-            # q = choices[random.randint(0, len(choices)-1)]
-            # print(f"You: {q}")
-            # sleep(2)
+            
         except:    
             choices = ["DEBUG == COULDNT PARSE CHOICER LIST."]  
-            # q = input("You: ")
-            # if q.strip().lower() == "exit":
-            #     return {"should_end": True}
             
+
     return {"current_choices": choices}
 
 
 def step_agent_think(state: GameState) -> GameState:
     hist = "\n".join(state["history"] + [f"Player: {state['latest_user']}"])
-    resp = agent.invoke({"messages": [{"role": "user", "content": hist}]})
+    monsters = "\n".join(state["adventure"].monsters)
+    
+    system_msg = {
+    "role": "system",
+    "content": (
+        "Only the following monsters are available in this adventure:\n"
+        f"{monsters}\n"
+        "Anything else would not be a valid combat target."
+    )
+    }
+    resp = thinker_agent.invoke({"messages": [system_msg,{"role": "user", "content": hist}]})
+    
     print("DEBUG ========== ", resp["messages"][-1].content)
     try:
         tool_msg=json.loads(resp["messages"][-1].content)
@@ -205,7 +222,7 @@ def step_agent_think(state: GameState) -> GameState:
 
 def step_run_combat(state: GameState) -> GameState:
     result = run_combat(state["current_enemy"], state["player"])
-    if type(result) == str:
+    if type(result) == str: #Enemy not found in the DB.
         print(result)
         return
     if result.get("signal") == 2:
@@ -217,7 +234,7 @@ def step_generate_story(state: GameState) -> GameState:
     state["history"] = compress_history(state["history"])
     
     p = state["player"]
-    player_summary = f"Name: {p.name} - Race: {p.race} - Class: {p.p_class} - Gold: {p.gold}"
+    player_summary = f"Name: {p.name} \n Gender: {p.gender} \n Race: {p.race} \n Class: {p.p_class} \n Gold: {p.gold} coins"
     chat_hist = "\n".join(state["history"])
     q = state["latest_user"]
     cmd = state["last_cmd"]
@@ -350,14 +367,17 @@ def back(state):
 # --- Build & Run StateGraph ---
 if __name__ == "__main__":
     
+    clear()
+    
     player = load_player()
-    intro = load_intro(False)
+    adv, intro = load_adv("emerald_sword", False)
         
     pre_graph = build_pre_input_graph(StateGraph(GameState))
     post_graph = build_post_input_graph(StateGraph(GameState))
     
     state: GameState = {
         "player": player,
+        "adventure": adv,
         "history": [intro],
         "story_steps": 0,
         "should_end": False,
@@ -369,7 +389,7 @@ if __name__ == "__main__":
     with gr.Blocks() as demo:
         with gr.Row():
             with gr.Column(scale=3):
-                gr.Markdown("### Call to AIdventure")
+                gr.Markdown(f"### Call to AIdventure : {state["adventure"].name}")
                 story_box   = gr.Textbox(interactive=False)
                 choice_radio= gr.Radio(label="Your action")
                 submit_btn  = gr.Button("Go")
