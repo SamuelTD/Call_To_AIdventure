@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-A LangGraph-based refactoring of the Call to AIdventure narrative game.
-"""
 import os
 import json
 from dotenv import load_dotenv
@@ -23,8 +19,8 @@ from langchain.chains.llm import LLMChain
 from utils.python_utils import clear
 from utils.player import Player, save_player, load_player
 from combat.core import run_combat
-import random
-from time import sleep
+
+import gradio as gr
 
 # --- Configuration constants ---
 CHAR_COL = "characters"
@@ -43,6 +39,7 @@ class GameState(TypedDict, total=False):
     combat_result: dict
     should_end: bool
     current_enemy: str
+    current_choices: list[str]
 
 # --- Embeddings & Vector Stores ---
 ollama_embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
@@ -72,7 +69,7 @@ tools = [
 
 
 #region LLM AND AGENTS
-llm = ChatGroq(api_key=GROQ_API_KEY, model="meta-llama/llama-4-maverick-17b-128e-instruct")
+llm = ChatGroq(api_key=GROQ_API_KEY, model="llama-3.3-70b-versatile")
 
 # --- Agent & Story Chain Setup ---
 agent = create_react_agent(
@@ -175,16 +172,16 @@ def step_get_input(state: GameState) -> GameState:
     if state["story_steps"] > -1:        
         try:
             choices = [item.strip() for item in make_choice(state["history"]).strip("[]").split(", ")]
-            q = choices[random.randint(0, len(choices)-1)]
-            print(f"You: {q}")
-            sleep(2)
+            # q = choices[random.randint(0, len(choices)-1)]
+            # print(f"You: {q}")
+            # sleep(2)
         except:    
-            print("DEBUG == COULDNT PARSE CHOICER LIST.")    
-            q = input("You: ")
-            if q.strip().lower() == "exit":
-                return {"should_end": True}
+            choices = ["DEBUG == COULDNT PARSE CHOICER LIST."]  
+            # q = input("You: ")
+            # if q.strip().lower() == "exit":
+            #     return {"should_end": True}
             
-    return {"latest_user": q}
+    return {"current_choices": choices}
 
 
 def step_agent_think(state: GameState) -> GameState:
@@ -204,13 +201,6 @@ def step_run_combat(state: GameState) -> GameState:
     if result.get("signal") == 2:
         print(result.get("message", "You have fallen."))
     return {"combat_result": result}
-
-def choose_entry(state: GameState) -> str:
-    # On the very first run, you won't have init_done set → load the intro
-    if not state.get("init_done", False):
-        return "load_intro"
-    # Once you've done that step, always go straight to get_input
-    return "get_input"
 
 def step_generate_story(state: GameState) -> GameState:
     
@@ -264,26 +254,41 @@ def step_end(state: GameState) -> GameState:
         print("Farewell, adventurer.")
     return {}
 
-def build_graph(builder): 
+#region GRAPHS
+
+def build_pre_input_graph(builder): 
     
      # Nodes
 
     builder.add_node("get_input", step_get_input)
-    builder.add_node("agent_think", step_agent_think)
-    builder.add_node("run_combat", step_run_combat)
-    builder.add_node("generate_story", step_generate_story)
-    builder.add_node("end", step_end)
 
     # Edges
    
     builder.add_edge(START, "get_input")
-    # Conditional routing after user input
-    builder.add_conditional_edges(
-        "get_input",
-        lambda s: s.get("should_end", False),
-        {True: "end", False: "agent_think"}
-    )
-    # Conditional routing after agent thinking
+    builder.add_edge("get_input", END)
+    
+    # # Conditional routing after user input
+    # builder.add_conditional_edges(
+    #     "get_input",
+    #     lambda s: s.get("should_end", False),
+    #     {True: "end", False: "agent_think"}
+    # )   
+
+    graph = builder.compile()
+
+    return graph
+
+def build_post_input_graph(builder):
+    
+    builder.add_node("agent_think", step_agent_think)
+    builder.add_node("run_combat", step_run_combat)
+    builder.add_node("generate_story", step_generate_story)
+    builder.add_node("end", step_end)
+    
+    
+    builder.add_edge(START, "agent_think")
+    
+     # Conditional routing after agent thinking
     builder.add_conditional_edges(
         "agent_think",
         lambda s: s.get("last_cmd"),
@@ -295,13 +300,14 @@ def build_graph(builder):
         lambda s: s["combat_result"]["signal"] == 2,
         {True: "end", False: "generate_story"}
     )
-    # Loop back for story generation
-    builder.add_edge("generate_story", "get_input")
+   
+    builder.add_edge("generate_story", END)
     builder.add_edge("end", END)
 
     graph = builder.compile()
 
     return graph
+
 
 # --- Build & Run StateGraph ---
 if __name__ == "__main__":
@@ -309,7 +315,8 @@ if __name__ == "__main__":
     player = load_player()
     intro = load_intro()
         
-    graph = build_graph(StateGraph(GameState))
+    pre_graph = build_pre_input_graph(StateGraph(GameState))
+    post_graph = build_post_input_graph(StateGraph(GameState))
     
     state: GameState = {
         "player": player,
@@ -321,6 +328,26 @@ if __name__ == "__main__":
     
     while True:
 
-        ctx = graph.invoke(input=state)
+        ctx = pre_graph.invoke(input=state)
+        print("Chose your next action : ")
+        for x, choice in enumerate(ctx["current_choices"]):
+            print(f"{x+1}. ",choice, "\n")
+        nb_choices = len(ctx["current_choices"])
+        while True:
+            i = input()
+            try:
+                i = int(i)
+                if i <= 0 or nb_choices > nb_choices:
+                    print("Please enter a valide choice.")
+                else:
+                    ctx["latest_user"] = ctx["current_choices"][i-1]
+                    break
+            except:
+                print("Please enter a valide choice.") 
+        
+        ctx = post_graph.invoke(input=ctx)   
+        print("EXIT ?")
+        if input().lower() == "exit":
+            break
         state = ctx
         
