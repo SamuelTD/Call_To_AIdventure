@@ -1,5 +1,5 @@
 import os
-import json
+import re, json
 from dotenv import load_dotenv
 from typing_extensions import TypedDict
 
@@ -15,6 +15,8 @@ from langgraph.prebuilt import create_react_agent
 from langchain.agents import Tool
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains.llm import LLMChain
+from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.prebuilt.chat_agent_executor import AgentState
 
 from utils.python_utils import clear
 from utils.player import Player, save_player, load_player
@@ -71,28 +73,30 @@ def nothing_tool(_: str) -> dict:
     return {"action": "continue"}
 
 tools = [
-    Tool(name="combat", func=combat_tool, description="Start combat against monster ; arg monster name", return_direct=True),
-    Tool(name="nothing", func=nothing_tool, description="Continue narrative without combat.", return_direct=True),
+    Tool(name="combat", func=combat_tool, description="When the player is facing a monster, start combat against that monster ; arg monster name", return_direct=True),
+    Tool(name="nothing", func=nothing_tool, description="Return nothing, do nothing.", return_direct=True),
 ]
 
 
 #region LLM AND AGENTS
-llm = ChatGroq(api_key=GROQ_API_KEY, model="llama-3.3-70b-versatile", model_kwargs={"seed": seed})
+llm = ChatGroq(api_key=GROQ_API_KEY, model="llama-3.3-70b-versatile", temperature=0.5, model_kwargs={"seed": seed})
 
 
 template = ChatPromptTemplate.from_template("{full_prompt}")
 story_chain = LLMChain(llm=llm, prompt=template)
 
-think_template = ChatPromptTemplate.from_template(
-        "You are the assistant to a fantasy Game Master. \
-        You decide which way the game goes next based on the tools you have and the user input."
-)
+instruction = ""
 
+def prompt_fn(state: AgentState) -> list[SystemMessage | HumanMessage]:
+    # Prepend your system instructions...
+    sys = SystemMessage(content=instruction)
+    # …then include whatever messages the agent has already seen
+    return [sys, *state["messages"]]
 
 thinker_agent = create_react_agent(
     model=llm,
     tools=tools,
-    prompt=think_template
+    prompt=prompt_fn
 )
 
 summary_template = ChatPromptTemplate.from_template(
@@ -197,27 +201,30 @@ def step_get_input(state: GameState) -> GameState:
 
 
 def step_agent_think(state: GameState) -> GameState:
-    hist = "\n".join(state["history"] + [f"Player: {state['latest_user']}"])
-    monsters = "\n".join(state["adventure"].monsters)
+    # hist = f"Context: {state["current_story"]}\n Player action: {state['latest_user']}"
     
-    system_msg = {
-    "role": "system",
-    "content": (
-        "Only the following monsters are available in this adventure:\n"
-        f"{monsters}\n"
-        "Anything else would not be a valid combat target."
-    )
-    }
-    resp = thinker_agent.invoke({"messages": [system_msg,{"role": "user", "content": hist}]})
+    messages = [
+    SystemMessage(content=f"Context: {state['current_story']}"),
+    HumanMessage(content=state['latest_user']),
+    ]
     
-    print("DEBUG ========== ", resp["messages"][-1].content)
-    try:
-        tool_msg=json.loads(resp["messages"][-1].content)
-    except:
-        print("DEBUG ===================== ")
-        print("COULDNT PARSE JSON. FULL RESPONSE : \n", resp)
-        return {"last_cmd": "end", "current_enemy": tool_msg.get("enemy", None)}
-    return {"last_cmd": tool_msg.get("action"), "current_enemy": tool_msg.get("enemy", None)}
+    resp = thinker_agent.invoke({"messages": messages})
+    content = resp["messages"][-1].content
+    # print(resp)
+    print("DEBUG ========== ", content)
+    m = re.match(r'^<function=(?P<name>\w+)(?P<args>\{.*?\})</function>$', content)
+    print("DEBUG M ========= ", m)
+    if not m:
+        tool_msg=json.loads(content)
+    else:
+        name, raw_args = m.groups()
+        args = json.loads(raw_args)
+        tool_msg = {"action": name, **args}        
+        # return {"last_cmd": "end", "current_enemy": tool_msg.get("enemy", None)}
+        
+    print("DEBUG ================== ", tool_msg)
+    action = tool_msg.get("action")
+    return {"last_cmd": "continue" if action == "nothing" else action, "current_enemy": tool_msg.get("enemy", None)}
 
 
 def step_run_combat(state: GameState) -> GameState:
@@ -343,6 +350,7 @@ def init(initial_state):
     ctx   = pre_graph.invoke(input=state)
     state["current_choices"] = ctx["current_choices"]
     return state["current_story"], gr.update(choices=ctx["current_choices"], value=None), state
+    # return state["current_story"], gr.update(choices=choices, value=None), state
 
 def step(choice, state):
     # 1) drive the “post” graph to update your world‐state
@@ -352,6 +360,7 @@ def step(choice, state):
     # 3) extract narrative + next‐choices
     story = ctx["current_story"]
     choices = ctx["current_choices"]
+    # choices = ["I attack the Zombie, starting a combat."]
     return story, gr.update(choices=choices, value=None), state
 
 def show_character(state):
@@ -385,6 +394,26 @@ if __name__ == "__main__":
         "current_story": intro
     }
     
+    instruction = (
+    "You are the assistant to a fantasy Game Master.\n"
+    "You have exactly two tools available:\n"
+    "  • combat(enemy: str) — start a fight with that monster\n"
+    "  • nothing(_)        — continue the story without combat\n\n"
+    "You must respond with exactly one JSON object calling one of these tools—no extra text.\n\n"
+    "You may also infer from the user’s description whether one of the known monsters is present—even if they don’t name it.  "
+    "If the user says “Strike” “Attack”, \"Slash\" or depicts combat intent against a creature on your list, call combat() with that monster’s exact name.\n\n"
+    f"Available monsters this adventure: {" - ".join(state["adventure"].monsters)}"
+    )
+  
+    
+    thinker_agent = create_react_agent(
+    model=llm,
+    tools=tools,
+    prompt=prompt_fn
+    )
+    
+    
+    # ----GRADIO-----
     init_with_state = partial(init, state)
     with gr.Blocks() as demo:
         with gr.Row():

@@ -7,14 +7,14 @@ from utils.python_utils import clear
 def run_combat(enemy: str, player: Player):
     monster = get_monster(enemy)
     
-    player.hp = 20
+    player.hp = 400
     
     if not monster:
         return f"{enemy} not found in database."
     
     while True:
         print(f"You attack {monster.name}.")
-        damage = r.randint(1, 6)
+        damage = r.randint(10, 100)
         monster.HP -= damage
         print(f"{monster.name} suffers {damage} damage. (Remaining : {monster.HP})\n")
         
