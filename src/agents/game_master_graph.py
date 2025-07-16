@@ -17,12 +17,10 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains.llm import LLMChain
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.prebuilt.chat_agent_executor import AgentState
-from IPython.display import Image, display
-from langchain_core.runnables.graph_mermaid import MermaidDrawMethod
 
 from utils.python_utils import clear
 from utils.player import Player, save_player, load_player
-from utils.adventure import Adventure, load_adventure
+from utils.adventure import Adventure, load_adventure, load_all_adventures
 from combat.core import run_combat
 
 import gradio as gr
@@ -95,11 +93,7 @@ def prompt_fn(state: AgentState) -> list[SystemMessage | HumanMessage]:
     # …then include whatever messages the agent has already seen
     return [sys, *state["messages"]]
 
-thinker_agent = create_react_agent(
-    model=llm,
-    tools=tools,
-    prompt=prompt_fn
-)
+thinker_agent = ""
 
 summary_template = ChatPromptTemplate.from_template(
     "You are a concise summarizer for fantasy narrative. You write in the past tense, in the third person and replace the 2nd person by \"the player\"."
@@ -110,7 +104,10 @@ summary_template = ChatPromptTemplate.from_template(
 summary_chain = LLMChain(llm=llm, prompt=summary_template)
 
 choicer_template = ChatPromptTemplate.from_template(
-    "You are role player in an adventure. Your role is to determine which next courses of action are aceptable based on the current context :"
+    "You are role player in an adventure." 
+    "Here is the current state of your character :"
+    "{player_summary}"
+    "Your role is to determine which next courses of action are aceptable based on the current context :"
     "{context}"
     "You will ONLY output EXACTLY three (3) actions using the following schema :"
     "[action1, action2, action3]"
@@ -120,10 +117,10 @@ choicer_chain = LLMChain(llm=llm, prompt=choicer_template)
 
 # region UTILS
 
-def make_choice(history: list[str]) -> str:
+def make_choice(history: list[str], player_summary: str) -> str:
     context = "\n".join(history)
     
-    choices = choicer_chain.predict(context=context).strip()
+    choices = choicer_chain.predict(context=context, player_summary=player_summary).strip()
     return choices
 
 def compress_history(history: list[str]) -> list[str]:
@@ -186,6 +183,11 @@ def load_adv(id: str, print: bool) -> str:
     if print: print(intro)
     return adv, intro
 
+def load_adv_intro(id: str) -> str:
+    with open(f"data/world/adventures/{id}/intro.txt", "r") as f:
+        intro = f.read()
+        
+    return intro
 
 # region STEPS
 # --- Step Implementations ---
@@ -193,7 +195,7 @@ def load_adv(id: str, print: bool) -> str:
 def step_get_input(state: GameState) -> GameState:
     if state["story_steps"] > -1:        
         try:
-            choices = [item.strip() for item in make_choice(state["history"]).strip("[]").split(", ")]
+            choices = [item.strip() for item in make_choice(state["history"], state["player"].get_summary()).strip("[]").split(", ")]
             
         except:    
             choices = ["DEBUG == COULDNT PARSE CHOICER LIST."]  
@@ -242,8 +244,7 @@ def step_generate_story(state: GameState) -> GameState:
     
     state["history"] = compress_history(state["history"])
     
-    p = state["player"]
-    player_summary = f"Name: {p.name} \n Gender: {p.gender} \n Race: {p.race} \n Class: {p.p_class} \n Gold: {p.gold} coins"
+    player_summary = state["player"].get_summary()
     chat_hist = "\n".join(state["history"])
     q = state["latest_user"]
     cmd = state["last_cmd"]
@@ -257,13 +258,11 @@ def step_generate_story(state: GameState) -> GameState:
                     Here is the adventure so far:
                     {chat_hist}
 
-                    You are the Game Master for a narrative adventure game. You take the user input and continue the story\
-                        based on the events so far and the user input. You use a refined, fantasy inspired tone to craft the story.\
-                            You write in the second person and conclude every message by "Now, what do you do?".\
-                                Limit each of your answer to four sentences maximum. The user juste vanquished {enemy}.\
-                                    Start your output by "You vanquished {enemy}" and go from there.
-
-                    User input: {q}
+                    You are the Game Master for a narrative adventure game. You take continue the story\
+                        based on the events so far. You use a refined, fantasy inspired tone to craft the story.\
+                            You write in the second person.\
+                                Limit each of your answer to four sentences maximum. The user juste vanquished and killed {enemy}.\
+                                    Start your output by "You vanquished {enemy}" and go from there, assuming {enemy} is dead.
                     """
     else:
         prompt = f"""
@@ -346,64 +345,16 @@ def build_post_input_graph(builder):
 
 # region GRADIO
 
-def init(initial_state):
+def init(index, adventure):
     # only called once, at app start
-    state = initial_state
-    ctx   = pre_graph.invoke(input=state)
-    state["current_choices"] = ctx["current_choices"]
-    return state["current_story"], gr.update(choices=ctx["current_choices"], value=None), state
-    # return state["current_story"], gr.update(choices=choices, value=None), state
-
-def step(choice, state):
-    # 1) drive the “post” graph to update your world‐state
-    state = post_graph.invoke(input={**state, "latest_user": choice})
-
-    
-    # 2) immediately re‐run the “pre” graph on that new state
-    ctx = pre_graph.invoke(input=state)
-    # 3) extract narrative + next‐choices
-    story = ctx["current_story"]
-    choices = ctx["current_choices"]
-    # choices = ["I attack the Zombie, starting a combat."]
-    return story, gr.update(choices=choices, value=None), state
-
-def show_character(state):
-    p = state["player"]
-    player_summary = f"Name: {p.name} \n Gender: {p.gender} \n Race: {p.race} \n Class: {p.p_class} \n Gold: {p.gold} coins"
-    return player_summary, gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), state
-
-def back(state):
-    return state["current_story"], gr.update(visible=True), gr.update(choices=state["current_choices"], value=None, visible=True),\
-        gr.update(visible=True), gr.update(visible=False), state
-
-#region MAIN
-# --- Build & Run StateGraph ---
-if __name__ == "__main__":
-    
-    clear()
+    global instruction, thinker_agent
     
     player = load_player()
-    adv, intro = load_adv("emerald_sword", False)
-        
-    pre_graph = build_pre_input_graph(StateGraph(GameState))
-#     png_bytes = pre_graph.get_graph().draw_mermaid_png(
-#     draw_method=MermaidDrawMethod.PYPPETEER
-# )
-#     # e.g. to save:
-#     with open("graph_pre.png", "wb") as f:
-#         f.write(png_bytes)
-
-    post_graph = build_post_input_graph(StateGraph(GameState))
-#     png_bytes = post_graph.get_graph().draw_mermaid_png(
-#     draw_method=MermaidDrawMethod.PYPPETEER
-# )
-#     # e.g. to save:
-#     with open("graph_post.png", "wb") as f:
-#         f.write(png_bytes)
+    intro = load_adv_intro(adventures[index].id)
     
     state: GameState = {
         "player": player,
-        "adventure": adv,
+        "adventure": adventures[index],
         "history": [intro],
         "story_steps": 0,
         "should_end": False,
@@ -421,7 +372,6 @@ if __name__ == "__main__":
     "If the user says “Strike” “Attack”, \"Slash\" or depicts combat intent against a creature on your list, call combat() with that monster’s exact name.\n\n"
     f"Available monsters this adventure: {" - ".join(state["adventure"].monsters)}"
     )
-  
     
     thinker_agent = create_react_agent(
     model=llm,
@@ -429,44 +379,163 @@ if __name__ == "__main__":
     prompt=prompt_fn
     )
     
+    ctx = pre_graph.invoke(input=state)
+    state["current_choices"] = ctx["current_choices"]
+    return state
+    # return state["current_story"], gr.update(choices=choices, value=None), state
+
+def step(choice, state):
+    # 1) drive the “post” graph to update your world‐state
+    state = post_graph.invoke(input={**state, "latest_user": choice})
+
+    
+    # 2) immediately re‐run the “pre” graph on that new state
+    ctx = pre_graph.invoke(input=state)
+    # 3) extract narrative + next‐choices
+    story = ctx["current_story"]
+    choices = ctx["current_choices"]
+    # choices = ["I attack the Zombie, starting a combat."]
+    return story, gr.update(choices=choices, value=None), state
+
+# def show_character(state):
+#     p = state["player"]
+#     player_summary = f"Name: {p.name} \n Gender: {p.gender} \n Race: {p.race} \n Class: {p.p_class} \n Gold: {p.gold} coins"
+#     return player_summary, gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), state
+
+# def back(state):
+#     return state["current_story"], gr.update(visible=True), gr.update(choices=state["current_choices"], value=None, visible=True),\
+#         gr.update(visible=True), gr.update(visible=False), state
+
+
+# this should load your saved state from a file-object
+def init_load(file_obj):
+    # saved_state = load_state_from_file(file_obj.name)
+    # return init(saved_state)
+    return None
+
+# wrap into one that also flips visibility
+def start_callback(index, adventures, mode):
+    if mode == "new":
+        st = init(index, adventures)
+    else:
+        pass
+        # story, choices, st = init_load(file_obj)
+    story = st["current_story"]
+    choices = st["current_choices"]
+    return (
+        story,
+        gr.update(choices=choices, value=None),
+        st,
+        gr.update(visible=False),  # hide landing
+        gr.update(visible=True),   # show game
+        gr.update(value=f"### Call to AIdventure : {st['adventure'].name}")
+    )
+
+def show_intro(index, adventures):
+    print(index)
+    print(adventures)
+    if index < 0 or index == None:
+        print("debug : inside the not index")
+        return ""
+    # adventures_list is your original Python list
+    return gr.update(value=adventures[index].description)
+
+#region MAIN
+# --- Build & Run StateGraph ---
+if __name__ == "__main__":
+    
+    clear()
+     
+    adventures = load_all_adventures()
+        
+    pre_graph = build_pre_input_graph(StateGraph(GameState))
+#     png_bytes = pre_graph.get_graph().draw_mermaid_png(
+#     draw_method=MermaidDrawMethod.PYPPETEER
+# )
+#     # e.g. to save:
+#     with open("graph_pre.png", "wb") as f:
+#         f.write(png_bytes)
+
+    post_graph = build_post_input_graph(StateGraph(GameState))
+#     png_bytes = post_graph.get_graph().draw_mermaid_png(
+#     draw_method=MermaidDrawMethod.PYPPETEER
+# )
+#     # e.g. to save:
+#     with open("graph_post.png", "wb") as f:
+#         f.write(png_bytes)
+    
+    
+    
     
     # ----GRADIO-----
-    init_with_state = partial(init, state)
-    
     with gr.Blocks() as demo:
-        with gr.Row():
-            with gr.Column(scale=3):
-                gr.Markdown(f"### Call to AIdventure : {state["adventure"].name}")
-                story_box   = gr.Textbox(interactive=False)
-                choice_radio= gr.Radio(label="Your action")
-                submit_btn  = gr.Button("Go")
-                # show_char_btn = gr.Button("Character sheet")
-                # back_btn = gr.Button("Back", visible=False)
-                state_holder= gr.State()
-            with gr.Column(scale=1):
-                gr.Markdown("### Character Sheet")
-                stats_panel = gr.JSON()
 
-        load_proc = demo.load(init_with_state, 
-                outputs=[story_box, choice_radio, state_holder])
+        # landing page
+        with gr.Column(visible=True) as landing:
+            gr.Markdown("## 🎲 Welcome to AIdventure")
+            adv_drop = gr.Dropdown(choices=[(a.name, i) for i, a in enumerate(adventures)], label="Choose a new adventure", value=None)
+            intro_box = gr.Textbox(
+            label="Adventure Intro",
+            interactive=False,
+            lines=5,
+            placeholder="Select an adventure to see its intro…"
+            )
+            # save_upload= gr.File(label="—or load a saved game—")
+            new_btn = gr.Button("Start New Game")
+            adv_state = gr.State(adventures)
+            # load_btn   = gr.Button("Load Saved Game")
+
+        # main game UI (hidden at first)
+        with gr.Column(visible=False) as game:
+            title_md    = gr.Markdown("")    # adventure title
+        # now nest a Row inside this Column:
+            with gr.Row():
+                with gr.Column(scale=3):
+                    story_box    = gr.Textbox(interactive=False)
+                    choice_radio = gr.Radio(label="Your action")
+                    submit_btn   = gr.Button("Next")
+                    state_holder = gr.State()
+                with gr.Column(scale=1):
+                    gr.Markdown("### Character Sheet")
+                    stats_panel = gr.JSON()
+
+         # whenever the dropdown changes, update the intro_box
+        adv_drop.change(
+            fn=show_intro,
+            inputs=[adv_drop, adv_state],
+            outputs=[intro_box]
+        )
         
-        load_proc.then(
-            fn=lambda state: state["player"].model_dump(),
+        # wire up the “start” buttons
+        new_btn.click(
+            fn=start_callback,
+            inputs=[adv_drop, adv_state, gr.State(value="new")],
+            outputs=[
+                story_box,
+                choice_radio,
+                state_holder,
+                landing,
+                game,
+                title_md
+            ]
+        ).then(
+            # once state_holder is set, show the character sheet
+            fn=lambda st: st["player"].model_dump(),
             inputs=[state_holder],
             outputs=[stats_panel]
         )
-        
-        
-        submit_action = submit_btn.click(step,
-                        inputs=[choice_radio, state_holder],
-                        outputs=[story_box, choice_radio, state_holder])
-        
-        submit_action.then(
-            fn=lambda state: state["player"].model_dump(),
+
+        # the in‑game “Go” button remains exactly as before
+        submit = submit_btn.click(
+            fn=step,
+            inputs=[choice_radio, state_holder],
+            outputs=[story_box, choice_radio, state_holder]
+        )
+        submit.then(
+            fn=lambda st: st["player"].model_dump(),
             inputs=[state_holder],
             outputs=[stats_panel]
         )
-
 
     demo.launch()
     

@@ -1,9 +1,10 @@
-from typing import List, Optional
+from typing import List, Optional, Any
 from pydantic import BaseModel, Field
 import json
 import sqlite3
 import os
 from dotenv import load_dotenv
+from pathlib import Path
 
 load_dotenv()
 
@@ -71,6 +72,35 @@ def load_adventure(adv_id: str) -> Adventure:
     }
     
     return Adventure(**payload)
+
+def load_all_adventures() -> List[Adventure]:
+    """
+    Fetch all adventures from the database and return them as a list of Adventure instances.
+    """
+    conn = sqlite3.connect(file_path)
+    cur = conn.execute(
+        'SELECT id, name, description, monsters, npcs, locations, items, tags '
+        'FROM adventures'
+    )
+    rows = cur.fetchall()
+    conn.close()
+
+    adventures: List[Adventure] = []
+    for row in rows:
+        id_, name, desc, monsters, npcs, locations, items, tags = row
+        payload = {
+            'id': id_,
+            'name': name,
+            'description': desc,
+            'monsters': json.loads(monsters),
+            'npcs': json.loads(npcs),
+            'locations': json.loads(locations),
+            'items': json.loads(items),
+            'tags': json.loads(tags)
+        }
+        adventures.append(Adventure(**payload))
+
+    return adventures
 
 if __name__=="__main__":
     save_adventure("emerald_sword")

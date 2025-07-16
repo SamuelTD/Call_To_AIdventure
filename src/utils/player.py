@@ -10,6 +10,9 @@ class Player(BaseModel):
     hp: int = Field(default=10)
     xp: int = Field(default=0)
     gender: str = Field(default="male")
+    
+    def get_summary(self) -> str :
+        return f"Name: {self.name} \n Gender: {self.gender} \n Race: {self.race} \n Class: {self.p_class} \n Gold: {self.gold} coins"
 
 file_path = "data/world/other/player.json"
 
@@ -25,3 +28,4 @@ def load_player(path=file_path) -> Player:
 def save_player(player: Player, path=file_path):
     with open(path, "w") as f:
         json.dump(player.model_dump(), f, indent=2)
+
