@@ -117,6 +117,7 @@ choicer_template = ChatPromptTemplate.from_template(
     "[action1, action2, action3]"
     "Each action is at maximum 6 words long."
     "You will refrain from giving actions that are similar to each other."
+    "You can only cast spells if your class is \"wizard\"."
 )
 choicer_chain = LLMChain(llm=llm, prompt=choicer_template)
 
@@ -164,19 +165,6 @@ def compress_history(history: list[str]) -> list[str]:
     return result
 
 # region GAME LOGIC
-
-def character_creation() -> Player:
-    clear()
-    print("=== Character Creation ===")
-    name = input("Name: ")
-    cls = input("Class: ")
-    race = input("Race: ")
-    gender = input("Gender: ")
-    gold = int(input("Starting gold: "))
-    player = Player(name=name, p_class=cls, race=race, gold=gold, gender=gender)
-    save_player(player)
-    clear()
-    return player
 
 def load_adv(id: str, print: bool) -> str:
     

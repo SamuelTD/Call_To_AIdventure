@@ -1,9 +1,13 @@
 {
-  "name": "Suzy",
-  "race": "Dwarf",
-  "p_class": "Rogue",
+  "name": "Test",
+  "race": "Human",
+  "p_class": "fighter",
   "gold": 0,
-  "hp": 25,
+  "hp": 30,
   "xp": 0,
-  "gender": "Female"
+  "gender": "Male",
+  "actions": [
+    "attack",
+    "defend"
+  ]
 }

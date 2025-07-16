@@ -1,16 +1,18 @@
 import json
 from pydantic import BaseModel, Field, ValidationError
 import re
+from utils.enums import CharacterClass, PlayerAction
 
 class Player(BaseModel):
     
     name: str
     race: str
-    p_class : str
+    p_class : CharacterClass
     gold: int
     hp: int = Field(default=10)
     xp: int = Field(default=0)
     gender: str = Field(default="male")
+    actions: list[PlayerAction] = Field(default=[PlayerAction.ATTACK, PlayerAction.DEFEND])
     
     def get_summary(self) -> str :
         return f"Name: {self.name} \n Gender: {self.gender} \n Race: {self.race} \n Class: {self.p_class} \n Gold: {self.gold} coins"
@@ -27,8 +29,9 @@ def load_player(path=file_path) -> Player:
         return player
 
 def save_player(player: Player, path=file_path):
+    data = player.model_dump(mode="json")
     with open(path, "w") as f:
-        json.dump(player.model_dump(), f, indent=2)
+        json.dump(data, f, indent=2)
 
 
 #region Creation
@@ -49,7 +52,7 @@ def prompt_choice(prompt: str, options: dict) -> str:
     options: mapping of accepted input -> canonical value
     e.g. {"1": "Human", "human": "Human", ...}
     """
-    choices_str = ", ".join(f"{k.upper()}" for k in sorted(set(options.values())))
+    # choices_str = ", ".join(f"{k.upper()}" for k in sorted(set(options.values())))
     keys_display = []
     # build something like "[1] Human, [2] Elf, [3] Dwarf"
     seen = {}
@@ -79,9 +82,9 @@ def main():
     race = prompt_choice("Choose your race", race_map)
 
     class_map = {
-        "1": "Fighter", "fighter": "Fighter",
-        "2": "Rogue",   "rogue":   "Rogue",
-        "3": "Wizard",  "wizard":  "Wizard",
+        "1": CharacterClass.FIGHTER.value, "fighter": CharacterClass.FIGHTER.value,
+        "2": CharacterClass.ROGUE.value,   "rogue":   CharacterClass.ROGUE.value,
+        "3": CharacterClass.WIZARD.value,  "wizard":  CharacterClass.WIZARD.value
     }
     p_class = prompt_choice("Choose your class", class_map)
 
@@ -94,7 +97,7 @@ def main():
     # defaults
     gold = 0
     xp = 0
-    hp_by_class = {"Fighter": 30, "Rogue": 25, "Wizard": 20}
+    hp_by_class = {"fighter": 30, "rogue": 25, "wizard": 20}
     hp = hp_by_class[p_class]
 
     try:
