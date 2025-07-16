@@ -4,6 +4,8 @@ import random as r
 from time import sleep
 from utils.python_utils import clear
 
+current_monster = ""
+
 def run_combat(enemy: str, player: Player):
     monster = get_monster(enemy)
     

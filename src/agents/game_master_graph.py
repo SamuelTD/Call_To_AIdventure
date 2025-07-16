@@ -17,6 +17,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains.llm import LLMChain
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.prebuilt.chat_agent_executor import AgentState
+from IPython.display import Image, display
+from langchain_core.runnables.graph_mermaid import MermaidDrawMethod
 
 from utils.python_utils import clear
 from utils.player import Player, save_player, load_player
@@ -211,9 +213,9 @@ def step_agent_think(state: GameState) -> GameState:
     resp = thinker_agent.invoke({"messages": messages})
     content = resp["messages"][-1].content
     # print(resp)
-    print("DEBUG ========== ", content)
+    # print("DEBUG ========== ", content)
     m = re.match(r'^<function=(?P<name>\w+)(?P<args>\{.*?\})</function>$', content)
-    print("DEBUG M ========= ", m)
+    # print("DEBUG M ========= ", m)
     if not m:
         tool_msg=json.loads(content)
     else:
@@ -222,7 +224,7 @@ def step_agent_think(state: GameState) -> GameState:
         tool_msg = {"action": name, **args}        
         # return {"last_cmd": "end", "current_enemy": tool_msg.get("enemy", None)}
         
-    print("DEBUG ================== ", tool_msg)
+    # print("DEBUG ================== ", tool_msg)
     action = tool_msg.get("action")
     return {"last_cmd": "continue" if action == "nothing" else action, "current_enemy": tool_msg.get("enemy", None)}
 
@@ -317,7 +319,7 @@ def build_post_input_graph(builder):
     builder.add_node("agent_think", step_agent_think)
     builder.add_node("run_combat", step_run_combat)
     builder.add_node("generate_story", step_generate_story)
-    builder.add_node("end", step_end)
+    builder.add_node("end_node", step_end)
     
     
     builder.add_edge(START, "agent_think")
@@ -332,11 +334,11 @@ def build_post_input_graph(builder):
     builder.add_conditional_edges(
         "run_combat",
         lambda s: s["combat_result"]["signal"] == 2,
-        {True: "end", False: "generate_story"}
+        {True: "end_node", False: "generate_story"}
     )
    
     builder.add_edge("generate_story", END)
-    builder.add_edge("end", END)
+    builder.add_edge("end_node", END)
 
     graph = builder.compile()
 
@@ -355,6 +357,8 @@ def init(initial_state):
 def step(choice, state):
     # 1) drive the “post” graph to update your world‐state
     state = post_graph.invoke(input={**state, "latest_user": choice})
+
+    
     # 2) immediately re‐run the “pre” graph on that new state
     ctx = pre_graph.invoke(input=state)
     # 3) extract narrative + next‐choices
@@ -382,7 +386,20 @@ if __name__ == "__main__":
     adv, intro = load_adv("emerald_sword", False)
         
     pre_graph = build_pre_input_graph(StateGraph(GameState))
+#     png_bytes = pre_graph.get_graph().draw_mermaid_png(
+#     draw_method=MermaidDrawMethod.PYPPETEER
+# )
+#     # e.g. to save:
+#     with open("graph_pre.png", "wb") as f:
+#         f.write(png_bytes)
+
     post_graph = build_post_input_graph(StateGraph(GameState))
+#     png_bytes = post_graph.get_graph().draw_mermaid_png(
+#     draw_method=MermaidDrawMethod.PYPPETEER
+# )
+#     # e.g. to save:
+#     with open("graph_post.png", "wb") as f:
+#         f.write(png_bytes)
     
     state: GameState = {
         "player": player,
@@ -415,6 +432,7 @@ if __name__ == "__main__":
     
     # ----GRADIO-----
     init_with_state = partial(init, state)
+    
     with gr.Blocks() as demo:
         with gr.Row():
             with gr.Column(scale=3):
@@ -448,39 +466,8 @@ if __name__ == "__main__":
             inputs=[state_holder],
             outputs=[stats_panel]
         )
-        
-        # show_char_btn.click(show_character,
-        #                     inputs=[state_holder],
-        #                     outputs=[story_box, submit_btn, choice_radio, show_char_btn, back_btn, state_holder])
 
-        # back_btn.click(back,
-        #                     inputs=[state_holder],
-        #                     outputs=[story_box, submit_btn, choice_radio, show_char_btn, back_btn, state_holder])
 
     demo.launch()
     
-    # while True:
-
-    #     ctx = pre_graph.invoke(input=state)
-    #     print("Chose your next action : ")
-    #     for x, choice in enumerate(ctx["current_choices"]):
-    #         print(f"{x+1}. ",choice, "\n")
-    #     nb_choices = len(ctx["current_choices"])
-    #     while True:
-    #         i = input()
-    #         try:
-    #             i = int(i)
-    #             if i <= 0 or nb_choices > nb_choices:
-    #                 print("Please enter a valide choice.")
-    #             else:
-    #                 ctx["latest_user"] = ctx["current_choices"][i-1]
-    #                 break
-    #         except:
-    #             print("Please enter a valide choice.") 
-        
-    #     ctx = post_graph.invoke(input=ctx)   
-    #     print("EXIT ?")
-    #     if input().lower() == "exit":
-    #         break
-    #     state = ctx
         
