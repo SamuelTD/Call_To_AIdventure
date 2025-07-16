@@ -1,3 +1,4 @@
+#region IMPORTS
 import os
 import re, json
 from dotenv import load_dotenv
@@ -28,6 +29,8 @@ from functools import partial
 
 import random
 
+
+#region CONFIG
 seed=random.randrange(2**32)
 
 # --- Configuration constants ---
@@ -50,6 +53,7 @@ class GameState(TypedDict, total=False):
     current_enemy: str
     current_choices: list[str]
     current_story: str
+    combat_fluff: str
 
 # --- Embeddings & Vector Stores ---
 ollama_embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
@@ -107,11 +111,12 @@ choicer_template = ChatPromptTemplate.from_template(
     "You are role player in an adventure." 
     "Here is the current state of your character :"
     "{player_summary}"
-    "Your role is to determine which next courses of action are aceptable based on the current context :"
+    "Your role is to determine which next courses of action are aceptable based on your character and the current context :"
     "{context}"
     "You will ONLY output EXACTLY three (3) actions using the following schema :"
     "[action1, action2, action3]"
     "Each action is at maximum 6 words long."
+    "You will refrain from giving actions that are similar to each other."
 )
 choicer_chain = LLMChain(llm=llm, prompt=choicer_template)
 
@@ -231,14 +236,24 @@ def step_agent_think(state: GameState) -> GameState:
     return {"last_cmd": "continue" if action == "nothing" else action, "current_enemy": tool_msg.get("enemy", None)}
 
 
-def step_run_combat(state: GameState) -> GameState:
-    result = run_combat(state["current_enemy"], state["player"])
-    if type(result) == str: #Enemy not found in the DB.
-        print(result)
-        return
-    if result.get("signal") == 2:
-        print(result.get("message", "You have fallen."))
-    return {"combat_result": result}
+def step_prepare_combat(state: GameState) -> GameState:
+    prompt = f"""
+    You are a game master for a fantasy role playing game. Your role is to write short (2-3 sentences maximum) 
+    descriptive scenes that will precede a combat. 
+    You base your narration on the following context and player input.
+    Context: {state["current_story"]}
+    Player input: {state["latest_user"]}
+    The enemy the player is about to combat is {state["current_enemy"]}.
+    """
+    fluff = story_chain.predict(full_prompt=prompt)
+    
+    # result = run_combat(state["current_enemy"], state["player"])
+    # if type(result) == str: #Enemy not found in the DB.
+    #     print(result)
+    #     return
+    # if result.get("signal") == 2:
+    #     print(result.get("message", "You have fallen."))
+    return {"combat_fluff": fluff}
 
 def step_generate_story(state: GameState) -> GameState:
     
@@ -284,11 +299,6 @@ def step_generate_story(state: GameState) -> GameState:
     return {"history": state["history"] + [f"You: {q}", f"Story: {story}"], "current_story": story, "story_steps": state["story_steps"] + 1}
 
 
-def step_end(state: GameState) -> GameState:
-    if state["combat_result"]["signal"] != 2:        
-        print("Farewell, adventurer.")
-    return {}
-
 #region GRAPHS
 
 def build_pre_input_graph(builder): 
@@ -316,9 +326,8 @@ def build_pre_input_graph(builder):
 def build_post_input_graph(builder):
     
     builder.add_node("agent_think", step_agent_think)
-    builder.add_node("run_combat", step_run_combat)
+    builder.add_node("prepare_combat", step_prepare_combat)
     builder.add_node("generate_story", step_generate_story)
-    builder.add_node("end_node", step_end)
     
     
     builder.add_edge(START, "agent_think")
@@ -327,17 +336,18 @@ def build_post_input_graph(builder):
     builder.add_conditional_edges(
         "agent_think",
         lambda s: s.get("last_cmd"),
-        {"combat": "run_combat", "continue": "generate_story", "end": END}
+        {"combat": "prepare_combat", "continue": "generate_story", "end": END}
     )
     # Conditional routing after combat
-    builder.add_conditional_edges(
-        "run_combat",
-        lambda s: s["combat_result"]["signal"] == 2,
-        {True: "end_node", False: "generate_story"}
-    )
+    builder.add_edge("prepare_combat", END)
+    
+    #   builder.add_conditional_edges(
+    #     "prepare_combat",
+    #     lambda s: s["combat_result"]["signal"] == 2,
+    #     {True: "end_node", False: "generate_story"}
+    # )
    
     builder.add_edge("generate_story", END)
-    builder.add_edge("end_node", END)
 
     graph = builder.compile()
 
@@ -369,7 +379,7 @@ def init(index, adventure):
     "  • nothing(_)        — continue the story without combat\n\n"
     "You must respond with exactly one JSON object calling one of these tools—no extra text.\n\n"
     "You may also infer from the user’s description whether one of the known monsters is present—even if they don’t name it.  "
-    "If the user says “Strike” “Attack”, \"Slash\" or depicts combat intent against a creature on your list, call combat() with that monster’s exact name.\n\n"
+    "If the user says “Strike” “Attack”, “Slash“ or depicts combat intent against a creature on your list, call combat() with that monster’s exact name.\n\n"
     f"Available monsters this adventure: {" - ".join(state["adventure"].monsters)}"
     )
     
@@ -387,7 +397,9 @@ def init(index, adventure):
 def step(choice, state):
     # 1) drive the “post” graph to update your world‐state
     state = post_graph.invoke(input={**state, "latest_user": choice})
-
+    if state["last_cmd"] == "combat":
+        
+        return state["combat_fluff"], gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), state
     
     # 2) immediately re‐run the “pre” graph on that new state
     ctx = pre_graph.invoke(input=state)
@@ -395,25 +407,13 @@ def step(choice, state):
     story = ctx["current_story"]
     choices = ctx["current_choices"]
     # choices = ["I attack the Zombie, starting a combat."]
-    return story, gr.update(choices=choices, value=None), state
+    return story, gr.update(choices=choices, value=None, visible=True), gr.update(visible=True), gr.update(visible=False), state
 
-# def show_character(state):
-#     p = state["player"]
-#     player_summary = f"Name: {p.name} \n Gender: {p.gender} \n Race: {p.race} \n Class: {p.p_class} \n Gold: {p.gold} coins"
-#     return player_summary, gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), state
-
-# def back(state):
-#     return state["current_story"], gr.update(visible=True), gr.update(choices=state["current_choices"], value=None, visible=True),\
-#         gr.update(visible=True), gr.update(visible=False), state
-
-
-# this should load your saved state from a file-object
 def init_load(file_obj):
     # saved_state = load_state_from_file(file_obj.name)
     # return init(saved_state)
     return None
 
-# wrap into one that also flips visibility
 def start_callback(index, adventures, mode):
     if mode == "new":
         st = init(index, adventures)
@@ -465,11 +465,16 @@ if __name__ == "__main__":
 #         f.write(png_bytes)
     
     
-    
-    
     # ----GRADIO-----
     with gr.Blocks() as demo:
-
+        gr.HTML("""
+            <style>
+            .large-text textarea {
+                font-size: 20px !important;
+            }
+            </style>
+            """)
+        
         # landing page
         with gr.Column(visible=True) as landing:
             gr.Markdown("## 🎲 Welcome to AIdventure")
@@ -478,7 +483,8 @@ if __name__ == "__main__":
             label="Adventure Intro",
             interactive=False,
             lines=5,
-            placeholder="Select an adventure to see its intro…"
+            placeholder="Select an adventure to see its intro…",
+            elem_classes="large-text"
             )
             # save_upload= gr.File(label="—or load a saved game—")
             new_btn = gr.Button("Start New Game")
@@ -491,9 +497,10 @@ if __name__ == "__main__":
         # now nest a Row inside this Column:
             with gr.Row():
                 with gr.Column(scale=3):
-                    story_box    = gr.Textbox(interactive=False)
+                    story_box    = gr.Textbox(interactive=False, elem_classes="large-text")
                     choice_radio = gr.Radio(label="Your action")
                     submit_btn   = gr.Button("Next")
+                    combat_btn   = gr.Button("It's a fight! ⚔️", visible=False)
                     state_holder = gr.State()
                 with gr.Column(scale=1):
                     gr.Markdown("### Character Sheet")
@@ -529,7 +536,7 @@ if __name__ == "__main__":
         submit = submit_btn.click(
             fn=step,
             inputs=[choice_radio, state_holder],
-            outputs=[story_box, choice_radio, state_holder]
+            outputs=[story_box, choice_radio, submit_btn, combat_btn, state_holder]
         )
         submit.then(
             fn=lambda st: st["player"].model_dump(),
