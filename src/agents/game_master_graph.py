@@ -22,7 +22,7 @@ from langgraph.prebuilt.chat_agent_executor import AgentState
 from utils.python_utils import clear
 from utils.player import Player, save_player, load_player
 from utils.adventure import Adventure, load_adventure, load_all_adventures
-from combat.core import run_combat
+from combat.core import setup_combat
 
 import gradio as gr
 from functools import partial
@@ -278,7 +278,7 @@ def step_generate_story(state: GameState) -> GameState:
                 You are the Game Master for a narrative adventure game. You take the user input and continue the story\
                     based on the events so far and the user input. You use a refined, fantasy inspired tone to craft the story.\
                         You write in the second person.\
-                            Limit each of your answer to four sentences maximum.
+                            Limit each of your answer to four sentences maximum. You do your best to make the story go forward without being rushed.
 
                 User input: {q}
                 """
@@ -428,6 +428,10 @@ def show_intro(index, adventures):
     # adventures_list is your original Python list
     return gr.update(value=adventures[index].description)
 
+def start_combat(state):
+    setup_combat(state["current_enemy"], state["player"])
+    return 
+
 #region MAIN
 # --- Build & Run StateGraph ---
 if __name__ == "__main__":
@@ -480,7 +484,7 @@ if __name__ == "__main__":
             # load_btn   = gr.Button("Load Saved Game")
 
         # main game UI (hidden at first)
-        with gr.Column(visible=False) as game:
+        with gr.Column(visible=False) as narration_screen:
             title_md    = gr.Markdown("")    # adventure title
         # now nest a Row inside this Column:
             with gr.Row():
@@ -493,7 +497,12 @@ if __name__ == "__main__":
                 with gr.Column(scale=1):
                     gr.Markdown("### Character Sheet")
                     stats_panel = gr.JSON()
-
+        
+        with gr.Column(visibile=False) as combat_screen:
+            title_md_combat = gr.Markdown("")
+            with gr.Row():
+                with gr.Column(scale=3):
+                    pass
          # whenever the dropdown changes, update the intro_box
         adv_drop.change(
             fn=show_intro,
@@ -510,7 +519,7 @@ if __name__ == "__main__":
                 choice_radio,
                 state_holder,
                 landing,
-                game,
+                narration_screen,
                 title_md
             ]
         ).then(
@@ -530,6 +539,13 @@ if __name__ == "__main__":
             fn=lambda st: st["player"].model_dump(),
             inputs=[state_holder],
             outputs=[stats_panel]
+        )
+        
+        #combat button
+        combat_btn.click(
+            fn=start_combat,
+            inputs=[state_holder],
+            outputs=[]
         )
 
     demo.launch()

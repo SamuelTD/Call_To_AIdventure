@@ -2,20 +2,27 @@ import json
 from pydantic import BaseModel, Field, ValidationError
 import re
 from utils.enums import CharacterClass, PlayerAction
+from utils.equipments import Equipmnent, Weapon
 
 class Player(BaseModel):
     
     name: str
     race: str
     p_class : CharacterClass
-    gold: int
+    gold: int = Field(default=10)
     hp: int = Field(default=10)
     xp: int = Field(default=0)
     gender: str = Field(default="male")
     actions: list[PlayerAction] = Field(default=[PlayerAction.ATTACK, PlayerAction.DEFEND])
+    inventory: list = Field(default=[])
+    weapon: Weapon = Field(default=Weapon(name="Sword", min=2, max_dmg=6))
+    strength: int = Field(default=0)
+    agility: int = Field(default=0)
+    arcana: int = Field(default=0)
     
     def get_summary(self) -> str :
-        return f"Name: {self.name} \n Gender: {self.gender} \n Race: {self.race} \n Class: {self.p_class} \n Gold: {self.gold} coins"
+        return f"Name: {self.name} \n Gender: {self.gender} \n Race: {self.race} \n Class: {self.p_class} \n Gold: {self.gold} coins \n\
+            Weapon : {self.weapon.name}"
 
 file_path = "data/world/other/player.json"
 
