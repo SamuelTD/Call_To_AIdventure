@@ -18,6 +18,8 @@ def setup_combat(enemy: str, param_player: Player):
     if not current_monster:
         return f"{enemy} not found in database."
     combat_log = []
+    combat_log.append(f"You are facing {current_monster.name}!")
+    return combat_log
 
 def player_action(action: PlayerAction):
     global player_is_defending

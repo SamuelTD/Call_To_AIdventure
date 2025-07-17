@@ -26,6 +26,8 @@ from combat.core import setup_combat
 
 import gradio as gr
 from functools import partial
+from PIL import Image
+from pathlib import Path
 
 import random
 
@@ -410,6 +412,7 @@ def start_callback(index, adventures, mode):
         # story, choices, st = init_load(file_obj)
     story = st["current_story"]
     choices = st["current_choices"]
+    # print("DEBUG CHOICES : ", choices)
     return (
         story,
         gr.update(choices=choices, value=None),
@@ -420,17 +423,22 @@ def start_callback(index, adventures, mode):
     )
 
 def show_intro(index, adventures):
-    print(index)
-    print(adventures)
+
     if index < 0 or index == None:
-        print("debug : inside the not index")
         return ""
-    # adventures_list is your original Python list
+    
     return gr.update(value=adventures[index].description)
 
 def start_combat(state):
-    setup_combat(state["current_enemy"], state["player"])
-    return 
+    combat_log = setup_combat(state["current_enemy"], state["player"])
+    script_dir   = Path(__file__).resolve().parent            # .../src/argents
+    project_root = script_dir.parents[1]  
+    
+    image = Image.open(f"{project_root}/data/pictures/{state["current_enemy"].replace(" ", "_")}.png")
+
+    return (gr.update(visible=False), gr.update(visible=True), "\n".join(combat_log),\
+        gr.update(choices=[a.value for a in state["player"].actions], value=None, interactive=True),\
+        gr.update(value=f"### {state['current_enemy']}"), image, state)
 
 #region MAIN
 # --- Build & Run StateGraph ---
@@ -498,11 +506,19 @@ if __name__ == "__main__":
                     gr.Markdown("### Character Sheet")
                     stats_panel = gr.JSON()
         
-        with gr.Column(visibile=False) as combat_screen:
+        with gr.Column(visible=False) as combat_screen:
             title_md_combat = gr.Markdown("")
             with gr.Row():
                 with gr.Column(scale=3):
-                    pass
+                    combat_log = gr.Textbox(interactive=False, elem_classes="large-text", label="Combat Log")
+                    combat_radio = gr.Radio(label="Your action")
+                    combat_action_btn = gr.Button("Next")
+                    
+                with gr.Column(scale=1):
+                    monster_md = gr.Markdown("")
+                    monster_image = gr.Image()
+                
+                
          # whenever the dropdown changes, update the intro_box
         adv_drop.change(
             fn=show_intro,
@@ -545,7 +561,7 @@ if __name__ == "__main__":
         combat_btn.click(
             fn=start_combat,
             inputs=[state_holder],
-            outputs=[]
+            outputs=[narration_screen, combat_screen, combat_log, combat_radio, monster_md, monster_image, state_holder]
         )
 
     demo.launch()
