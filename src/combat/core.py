@@ -19,7 +19,7 @@ def setup_combat(enemy: str, param_player: Player):
         return f"{enemy} not found in database."
     combat_log = []
     combat_log.append(f"You are facing {current_monster.name}!")
-    return combat_log
+    return combat_log, current_monster
 
 def player_action(action: PlayerAction):
     global player_is_defending
@@ -29,25 +29,29 @@ def player_action(action: PlayerAction):
         case PlayerAction.ATTACK:
             dmg = r.randint(player.weapon.min_dmg, player.weapon.max_dmg)+player.strength
             current_monster.HP -= dmg
-            combat_log.append(f"You attack {current_monster.name} with your {player.weapon.name} and deal {dmg} damage points to them.\
-                ({current_monster.HP} health remaining)")
+            combat_log.append(f"You attack {current_monster.name} with your {player.weapon.name} and deal {dmg} damage points to them.")
         case PlayerAction.DEFEND:
             player_is_defending = True
             combat_log.append(f"You focus on defending yourself against {current_monster.name} attacks.")
     
     if current_monster.HP <= 0:
-        return True
-    
-    return False
+        combat_log.append(f"You have defeated {current_monster.name}!")
+    return current_monster.HP <= 0, combat_log
 
 def monster_attack():
     dmg = r.randint(1, 6)+current_monster.strength
     if player_is_defending:
         dmg /= 2
-        if dmg < 0:
-            dmg = 0
+        dmg = int(dmg)
+        
+    if dmg < 0:
+        dmg = 0
+        
     player.hp -= dmg
-    combat_log.append(f"{current_monster.name} attacks you! You suffer {dmg} damage points. ({player.hp} health remaining)")
+    combat_log.append(f"{current_monster.name} attacks you! You suffer {dmg} damage points.")
+    if player.hp<= 0:
+        combat_log.append("You have died!")
+    return player.hp <= 0, combat_log
 
 # def run_combat(enemy: str, player: Player):
 #     global current_monster

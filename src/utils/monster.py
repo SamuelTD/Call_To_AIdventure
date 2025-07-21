@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import sqlite3
 from typing import Optional
 import os
@@ -13,6 +13,7 @@ class Monster(BaseModel):
     name: str
     armor: int
     HP: int
+    max_HP: int = Field(default=1)
     challenge_rating: int
     strength: int
     dexterity: int
@@ -41,6 +42,7 @@ def get_monster(name: str) -> Optional[Monster]:
 
     # Finally, construct the Monster
     monster = Monster(**data)
+    monster.max_HP = monster.HP
     return monster
 
 if __name__ == "__main__":

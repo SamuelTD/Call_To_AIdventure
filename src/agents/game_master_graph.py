@@ -21,8 +21,10 @@ from langgraph.prebuilt.chat_agent_executor import AgentState
 
 from utils.python_utils import clear
 from utils.player import Player, save_player, load_player
+from utils.monster import Monster
 from utils.adventure import Adventure, load_adventure, load_all_adventures
-from combat.core import setup_combat
+from utils.enums import PlayerAction
+from combat.core import setup_combat, player_action, monster_attack
 
 import gradio as gr
 from functools import partial
@@ -52,7 +54,8 @@ class GameState(TypedDict, total=False):
     last_cmd: dict
     combat_result: dict
     should_end: bool
-    current_enemy: str
+    current_monster_name: str
+    current_monster: Monster
     current_choices: list[str]
     current_story: str
     combat_fluff: str
@@ -219,11 +222,11 @@ def step_agent_think(state: GameState) -> GameState:
         name, raw_args = m.groups()
         args = json.loads(raw_args)
         tool_msg = {"action": name, **args}        
-        # return {"last_cmd": "end", "current_enemy": tool_msg.get("enemy", None)}
+        # return {"last_cmd": "end", "current_monster_name": tool_msg.get("enemy", None)}
         
     # print("DEBUG ================== ", tool_msg)
     action = tool_msg.get("action")
-    return {"last_cmd": "continue" if action == "nothing" else action, "current_enemy": tool_msg.get("enemy", None)}
+    return {"last_cmd": "continue" if action == "nothing" else action, "current_monster_name": tool_msg.get("enemy", None)}
 
 
 def step_prepare_combat(state: GameState) -> GameState:
@@ -233,11 +236,11 @@ def step_prepare_combat(state: GameState) -> GameState:
     You base your narration on the following context and player input.
     Context: {state["current_story"]}
     Player input: {state["latest_user"]}
-    The enemy the player is about to combat is {state["current_enemy"]}.
+    The enemy the player is about to combat is {state["current_monster_name"]}.
     """
     fluff = story_chain.predict(full_prompt=prompt)
     
-    # result = run_combat(state["current_enemy"], state["player"])
+    # result = run_combat(state["current_monster_name"], state["player"])
     # if type(result) == str: #Enemy not found in the DB.
     #     print(result)
     #     return
@@ -255,7 +258,7 @@ def step_generate_story(state: GameState) -> GameState:
     cmd = state["last_cmd"]
     
     if cmd == "combat":
-        enemy = state["current_enemy"]
+        enemy = state["current_monster_name"]
         prompt = f"""
                     Here are the informations on the user :
                     {player_summary}
@@ -387,8 +390,7 @@ def init(index, adventure):
 def step(choice, state):
     # 1) drive the “post” graph to update your world‐state
     state = post_graph.invoke(input={**state, "latest_user": choice})
-    if state["last_cmd"] == "combat":
-        
+    if state["last_cmd"] == "combat":        
         return state["combat_fluff"], gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), state
     
     # 2) immediately re‐run the “pre” graph on that new state
@@ -399,10 +401,14 @@ def step(choice, state):
     # choices = ["I attack the Zombie, starting a combat."]
     return story, gr.update(choices=choices, value=None, visible=True), gr.update(visible=True), gr.update(visible=False), state
 
+def post_combat_step(state):
+    pass
+
 def init_load(file_obj):
     # saved_state = load_state_from_file(file_obj.name)
     # return init(saved_state)
     return None
+
 
 def start_callback(index, adventures, mode):
     if mode == "new":
@@ -430,15 +436,46 @@ def show_intro(index, adventures):
     return gr.update(value=adventures[index].description)
 
 def start_combat(state):
-    combat_log = setup_combat(state["current_enemy"], state["player"])
+    combat_log, state["current_monster"] = setup_combat(state["current_monster_name"], state["player"])
     script_dir   = Path(__file__).resolve().parent            # .../src/argents
     project_root = script_dir.parents[1]  
     
-    image = Image.open(f"{project_root}/data/pictures/{state["current_enemy"].replace(" ", "_")}.png")
-
+    image = Image.open(f"{project_root}/data/pictures/{state["current_monster_name"].replace(" ", "_")}.png")
+    choices=[a.value for a in state["player"].actions]
     return (gr.update(visible=False), gr.update(visible=True), "\n".join(combat_log),\
-        gr.update(choices=[a.value for a in state["player"].actions], value=None, interactive=True),\
-        gr.update(value=f"### {state['current_enemy']}"), image, state)
+        gr.update(choices=choices, value=choices[0], interactive=True),\
+        gr.update(value=f"### {state['current_monster_name']}"), image, state)
+
+def start_player_action(state, combat_action):
+    player_has_won, combat_log = player_action(PlayerAction(combat_action))
+    player_has_died = False
+    if not player_has_won:
+        player_has_died, combat_log = monster_attack()
+    
+    #Neither player nor creature are dead : combat continues
+    if not player_has_died and not player_has_won:
+        choices=[a.value for a in state["player"].actions]
+        return "\n".join(combat_log), gr.update(choices=choices, value=choices[0], interactive=True), gr.update(visible=True), gr.update(visible=False),state
+    
+    else:
+        state["last_cmd"] = "post_combat"
+        return "\n".join(combat_log), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), state
+ 
+    
+def render_health_bar(hp_percent: int, length: int = 20, player: bool=True):
+    # length = number of blocks in your bar
+    filled_blocks = int(hp_percent / 100 * length)
+    empty_blocks  = length - filled_blocks
+    bar = "🟥" * filled_blocks + "⬛" * empty_blocks
+    if player:
+        return f"**Your health:** [{bar}] {int(hp_percent)}%"   
+    else:
+        return f"**Enemy health:** [{bar}] {int(hp_percent)}%"    
+
+def update_health_bar(state):
+    return render_health_bar((state["player"].hp/state["player"].max_hp)*100, state["player"].max_hp),\
+        render_health_bar((state["current_monster"].HP/state["current_monster"].max_HP)*100, state["current_monster"].max_HP, False)
+    
 
 #region MAIN
 # --- Build & Run StateGraph ---
@@ -512,11 +549,14 @@ if __name__ == "__main__":
                 with gr.Column(scale=3):
                     combat_log = gr.Textbox(interactive=False, elem_classes="large-text", label="Combat Log")
                     combat_radio = gr.Radio(label="Your action")
+                    player_health_md = gr.Markdown(render_health_bar(100))
                     combat_action_btn = gr.Button("Next")
+                    victory_btn = gr.Button("Victory! 👑", visible=False)
                     
                 with gr.Column(scale=1):
                     monster_md = gr.Markdown("")
                     monster_image = gr.Image()
+                    monster_health_md = gr.Markdown(render_health_bar(100))
                 
                 
          # whenever the dropdown changes, update the intro_box
@@ -557,13 +597,27 @@ if __name__ == "__main__":
             outputs=[stats_panel]
         )
         
-        #combat button
+        #combat start button
         combat_btn.click(
             fn=start_combat,
             inputs=[state_holder],
             outputs=[narration_screen, combat_screen, combat_log, combat_radio, monster_md, monster_image, state_holder]
+        ).then(
+            fn=update_health_bar,
+            inputs=[state_holder],
+            outputs=[player_health_md, monster_health_md]
         )
-
+        
+        #combat action selection button
+        combat_action_btn.click(
+            fn=start_player_action,
+            inputs=[state_holder, combat_radio],
+            outputs=[combat_log, combat_radio, combat_action_btn, victory_btn, state_holder]
+        ).then(
+            fn=update_health_bar,
+            inputs=[state_holder],
+            outputs=[player_health_md, monster_health_md]
+        )
     demo.launch()
     
         

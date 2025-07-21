@@ -10,7 +10,8 @@ class Player(BaseModel):
     race: str
     p_class : CharacterClass
     gold: int = Field(default=10)
-    hp: int = Field(default=10)
+    max_hp: int = Field(default=10)
+    hp: int
     xp: int = Field(default=0)
     gender: str = Field(default="male")
     actions: list[PlayerAction] = Field(default=[PlayerAction.ATTACK, PlayerAction.DEFEND])
@@ -31,7 +32,7 @@ def load_player(path=file_path) -> Player:
         data = json.load(open(path))
         return Player(**data)
     except FileNotFoundError:
-        player = Player(name="Stan", race="human", p_class="fighter", gold=10, hp=20, xp=0)
+        player = Player(name="Stan", race="human", p_class="fighter", gold=10, max_hp=20, xp=0)
         save_player(player)
         return player
 
@@ -114,7 +115,7 @@ def main():
             p_class=p_class,
             gender=gender,
             gold=gold,
-            hp=hp,
+            max_hp=hp,
             xp=xp
         )
     except ValidationError as e:
@@ -127,7 +128,7 @@ def main():
     print(f"  Class: {player.p_class}")
     print(f"  Gender: {player.gender}")
     print(f"  Gold : {player.gold}")
-    print(f"  HP   : {player.hp}")
+    print(f"  HP   : {player.max_hp}")
     print(f"  XP   : {player.xp}")
     
     save_player(player)
