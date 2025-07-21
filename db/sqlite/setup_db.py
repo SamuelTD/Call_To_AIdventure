@@ -44,7 +44,10 @@ def create_schema(conn: sqlite3.Connection) -> None:
       intelligence INTEGER,
       wisdom INTEGER,
       charisma INTEGER,
-      description TEXT
+      description TEXT,
+      gold_loot_min INTEGER,
+      gold_loot_max INTEGER,
+      items_loot TEXT 
     );
     """
     )
@@ -79,11 +82,26 @@ def load_monsters(
       INSERT OR REPLACE INTO monsters
       (name, armor, HP, challenge_rating,
        strength, dexterity, constitution,
-       intelligence, wisdom, charisma, description)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       intelligence, wisdom, charisma, description, gold_loot_min, gold_loot_max, items_loot)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
 
     for m in monsters:
+        gold_min = 0
+        gold_max = 0
+        loot = []
+        try:
+            gold_min = m.get("gold_loot")[0]
+            gold_max = m.get("gold_loot")[1]
+            
+        except:
+            gold_min = 0
+            gold_max = 1
+        
+        try:
+            loot = json.dumps(m.get("items_loot"))
+        except:
+            loot = json.dumps(["debug loot item"])
         conn.execute(insert_sql, (
             m.get("name"),
             m.get("armor"),
@@ -95,8 +113,11 @@ def load_monsters(
             parse_bonus(m.get("intelligence", "0")),
             parse_bonus(m.get("wisdom", "0")),
             parse_bonus(m.get("charisma", "0")),
-            m.get("description")
-        ))
+            m.get("description"),
+            gold_min,
+            gold_max,
+            loot
+            ))
     conn.commit()
 
 

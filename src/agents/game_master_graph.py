@@ -59,6 +59,9 @@ class GameState(TypedDict, total=False):
     current_choices: list[str]
     current_story: str
     combat_fluff: str
+    gold_loot: int
+    item_loot: list[str]
+    after_combat: bool
 
 # --- Embeddings & Vector Stores ---
 ollama_embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
@@ -191,15 +194,19 @@ def load_adv_intro(id: str) -> str:
 # --- Step Implementations ---
 
 def step_get_input(state: GameState) -> GameState:
-    if state["story_steps"] > -1:        
-        try:
-            choices = [item.strip() for item in make_choice(state["history"], state["player"].get_summary()).strip("[]").split(", ")]
-            
-        except:    
-            choices = ["DEBUG == COULDNT PARSE CHOICER LIST."]  
+    if state["after_combat"]:
+        choices = ["Go onward."]
+        state["after_combat"] = False
+    else:
+        if state["story_steps"] > -1:        
+            try:
+                choices = [item.strip() for item in make_choice(state["current_story"], state["player"].get_summary()).strip("[]").split(", ")]
+                
+            except:    
+                choices = ["DEBUG == COULDNT PARSE CHOICER LIST."]  
             
 
-    return {"current_choices": choices}
+    return {"current_choices": choices, "after_combat": False}
 
 
 def step_agent_think(state: GameState) -> GameState:
@@ -271,7 +278,11 @@ def step_generate_story(state: GameState) -> GameState:
                             You write in the second person.\
                                 Limit each of your answer to four sentences maximum. The user juste vanquished and killed {enemy}.\
                                     Start your output by "You vanquished {enemy}" and go from there, assuming {enemy} is dead.
+                                    On the corpse the player found {state["gold_loot"]} gold pieces and {state["item_loot"]} as loot. Incorporate those 
+                                    into your narrative.
                     """
+        state["player"].gold += state["gold_loot"]
+        state["last_cmd"] = "continue"
     else:
         prompt = f"""
                 Here are the informations on the user :
@@ -289,7 +300,7 @@ def step_generate_story(state: GameState) -> GameState:
                 """
     story = story_chain.predict(full_prompt=prompt)
     print("Story:", story, "\n")
-    return {"history": state["history"] + [f"You: {q}", f"Story: {story}"], "current_story": story, "story_steps": state["story_steps"] + 1}
+    return {"history": state["history"] + [f"You: {q}", f"Story: {story}"], "current_story": story, "story_steps": state["story_steps"] + 1, "last_cmd": state["last_cmd"]}
 
 
 #region GRAPHS
@@ -323,7 +334,8 @@ def build_post_input_graph(builder):
     builder.add_node("generate_story", step_generate_story)
     
     
-    builder.add_edge(START, "agent_think")
+    builder.add_conditional_edges(START, lambda s: s.get("last_cmd"),
+        {"combat": "generate_story", "continue": "agent_think"})
     
      # Conditional routing after agent thinking
     builder.add_conditional_edges(
@@ -362,7 +374,9 @@ def init(index, adventure):
         "story_steps": 0,
         "should_end": False,
         "combat_result": {"signal": 0, "message": ""},
-        "current_story": intro
+        "current_story": intro,
+        "last_cmd": "continue",
+        "after_combat": False
     }
     
     instruction = (
@@ -390,19 +404,19 @@ def init(index, adventure):
 def step(choice, state):
     # 1) drive the “post” graph to update your world‐state
     state = post_graph.invoke(input={**state, "latest_user": choice})
-    if state["last_cmd"] == "combat":        
-        return state["combat_fluff"], gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), state
+    if state["last_cmd"] == "combat":      
+        print("DEBUG : STATE = combat")  
+        return gr.update(visible=True), gr.update(visible=False), state["combat_fluff"], gr.update(visible=False), gr.update(visible=False),\
+            gr.update(visible=True),  gr.update(visible=False), state
     
     # 2) immediately re‐run the “pre” graph on that new state
-    ctx = pre_graph.invoke(input=state)
+    state = pre_graph.invoke(input=state)
     # 3) extract narrative + next‐choices
-    story = ctx["current_story"]
-    choices = ctx["current_choices"]
+    story = state["current_story"]
+    choices = state["current_choices"]
     # choices = ["I attack the Zombie, starting a combat."]
-    return story, gr.update(choices=choices, value=None, visible=True), gr.update(visible=True), gr.update(visible=False), state
-
-def post_combat_step(state):
-    pass
+    return gr.update(visible=True), gr.update(visible=False), story, gr.update(choices=choices, value=None, visible=True),\
+        gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), state
 
 def init_load(file_obj):
     # saved_state = load_state_from_file(file_obj.name)
@@ -443,7 +457,8 @@ def start_combat(state):
     image = Image.open(f"{project_root}/data/pictures/{state["current_monster_name"].replace(" ", "_")}.png")
     choices=[a.value for a in state["player"].actions]
     return (gr.update(visible=False), gr.update(visible=True), "\n".join(combat_log),\
-        gr.update(choices=choices, value=choices[0], interactive=True),\
+        gr.update(choices=choices, value=choices[0], interactive=True, visible=True),\
+        gr.update(visible=True),
         gr.update(value=f"### {state['current_monster_name']}"), image, state)
 
 def start_player_action(state, combat_action):
@@ -458,8 +473,13 @@ def start_player_action(state, combat_action):
         return "\n".join(combat_log), gr.update(choices=choices, value=choices[0], interactive=True), gr.update(visible=True), gr.update(visible=False),state
     
     else:
-        state["last_cmd"] = "post_combat"
-        return "\n".join(combat_log), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), state
+        if player_has_won:
+            state["gold_loot"] = random.randint(*state["current_monster"].gold_loot)
+            state["item_loot"] = random.choice(state["current_monster"].items_loot)
+            print("LOOT = ", state["item_loot"])        
+            state["player"].inventory.append(state["item_loot"])
+            state["after_combat"] = True
+            return "\n".join(combat_log), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), state
  
     
 def render_health_bar(hp_percent: int, length: int = 20, player: bool=True):
@@ -589,7 +609,7 @@ if __name__ == "__main__":
         submit = submit_btn.click(
             fn=step,
             inputs=[choice_radio, state_holder],
-            outputs=[story_box, choice_radio, submit_btn, combat_btn, state_holder]
+            outputs=[narration_screen, combat_screen, story_box, choice_radio, submit_btn, combat_btn, victory_btn, state_holder]
         )
         submit.then(
             fn=lambda st: st["player"].model_dump(),
@@ -601,7 +621,7 @@ if __name__ == "__main__":
         combat_btn.click(
             fn=start_combat,
             inputs=[state_holder],
-            outputs=[narration_screen, combat_screen, combat_log, combat_radio, monster_md, monster_image, state_holder]
+            outputs=[narration_screen, combat_screen, combat_log, combat_radio, combat_action_btn, monster_md, monster_image, state_holder]
         ).then(
             fn=update_health_bar,
             inputs=[state_holder],
@@ -618,6 +638,18 @@ if __name__ == "__main__":
             inputs=[state_holder],
             outputs=[player_health_md, monster_health_md]
         )
+        
+         # the in‑game “Go” button remains exactly as before
+        victory_btn.click(
+            fn=step,
+            inputs=[choice_radio, state_holder],
+            outputs=[narration_screen, combat_screen, story_box, choice_radio, submit_btn, combat_btn, victory_btn, state_holder]
+        ).then(
+            fn=lambda st: st["player"].model_dump(),
+            inputs=[state_holder],
+            outputs=[stats_panel]
+        )
+        
     demo.launch()
     
         

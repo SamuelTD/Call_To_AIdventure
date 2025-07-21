@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 import sqlite3
-from typing import Optional
-import os
+from typing import Optional, Tuple, List
+import os, json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -22,6 +22,8 @@ class Monster(BaseModel):
     wisdom: int
     charisma: int
     description: str
+    gold_loot: Tuple[int, int] = Field(default=(0,0))
+    items_loot : List[str] = Field(default=[])
 
 def get_monster(name: str) -> Optional[Monster]:
     """
@@ -39,13 +41,24 @@ def get_monster(name: str) -> Optional[Monster]:
 
     # Build a dict mapping column names → values
     data = dict(zip(cols, row))
+    
+    # Deserialize your JSON string into a real Python list
+    try:
+        data["items_loot"] = json.loads(data["items_loot"])
+    except (TypeError, json.JSONDecodeError):
+        # fallback to an empty list (or handle as you see fit)
+        data["items_loot"] = []
 
-    # Finally, construct the Monster
+    # Pack gold_loot as a tuple
+    data["gold_loot"] = (data["gold_loot_min"], data["gold_loot_max"])
+
+    # Now everything lines up with your Monster model
     monster = Monster(**data)
     monster.max_HP = monster.HP
+    print("MONSTER =  ", monster)
     return monster
 
 if __name__ == "__main__":
     
-    monster = get_monster("Aarakocra Aeromancer")
+    monster = get_monster("Kobold Warrior")
     print(monster.name)
