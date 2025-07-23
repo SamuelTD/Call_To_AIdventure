@@ -415,7 +415,7 @@ def step(choice, state):
     story = state["current_story"]
     choices = state["current_choices"]
     # choices = ["I attack the Zombie, starting a combat."]
-    return gr.update(visible=True), gr.update(visible=False), story, gr.update(choices=choices, value=None, visible=True),\
+    return gr.update(visible=True), gr.update(visible=False), story, gr.update(choices=choices, value=choices[0], visible=True),\
         gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), state
 
 def init_load(file_obj):
@@ -435,7 +435,7 @@ def start_callback(index, adventures, mode):
     # print("DEBUG CHOICES : ", choices)
     return (
         story,
-        gr.update(choices=choices, value=None),
+        gr.update(choices=choices, value=choices[0]),
         st,
         gr.update(visible=False),  # hide landing
         gr.update(visible=True),   # show game
@@ -444,10 +444,10 @@ def start_callback(index, adventures, mode):
 
 def show_intro(index, adventures):
 
-    if index < 0 or index == None:
-        return ""
+    if index is None or index < 0:
+        return "", gr.update(visible=False)
     
-    return gr.update(value=adventures[index].description)
+    return gr.update(value=adventures[index].description), gr.update(visible=True)
 
 def start_combat(state):
     combat_log, state["current_monster"] = setup_combat(state["current_monster_name"], state["player"])
@@ -470,7 +470,8 @@ def start_player_action(state, combat_action):
     #Neither player nor creature are dead : combat continues
     if not player_has_died and not player_has_won:
         choices=[a.value for a in state["player"].actions]
-        return "\n".join(combat_log), gr.update(choices=choices, value=choices[0], interactive=True), gr.update(visible=True), gr.update(visible=False),state
+        return "\n".join(combat_log), gr.update(choices=choices, value=choices[0], interactive=True), gr.update(visible=True),\
+            gr.update(visible=False), gr.update(visible=False), state
     
     else:
         if player_has_won:
@@ -479,7 +480,11 @@ def start_player_action(state, combat_action):
             print("LOOT = ", state["item_loot"])        
             state["player"].inventory.append(state["item_loot"])
             state["after_combat"] = True
-            return "\n".join(combat_log), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), state
+            return "\n".join(combat_log), gr.update(visible=False), gr.update(visible=False),\
+                gr.update(visible=True), gr.update(visible=False), state
+        else:
+            return "\n".join(combat_log), gr.update(visible=False), gr.update(visible=False),\
+                gr.update(visible=False), gr.update(visible=True), state
  
     
 def render_health_bar(hp_percent: int, length: int = 20, player: bool=True):
@@ -495,7 +500,34 @@ def render_health_bar(hp_percent: int, length: int = 20, player: bool=True):
 def update_health_bar(state):
     return render_health_bar((state["player"].hp/state["player"].max_hp)*100, state["player"].max_hp),\
         render_health_bar((state["current_monster"].HP/state["current_monster"].max_HP)*100, state["current_monster"].max_HP, False)
+
+def return_to_title_screen():
+    return gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), gr.update(value=None),\
+        gr.update(value=None, placeholder="Select an adventure to see its intro…")
+
+def update_character_sheet(player: Player):
+    inv = player.inventory if player.inventory else []
+    inventory_md = "\n".join([f"- {item}" for item in inv]) if inv else "*None*"
+
+    return f"""\
+        **Name:** {player.name}  
+        **Class:** {player.p_class.value}  
+        **Race:** {player.race}  
+        **Money:** 💰 {player.gold} gold  
+        **Health:** ❤️ {player.hp}/{player.max_hp}  
+        
+        ---
+        **Weapon:**  
+        {player.weapon.name}  
+        **Inventory:**  
+        {inventory_md}
+        """
     
+def show_character_sheet(state):
+    player = state["player"]
+    markdown = update_character_sheet(player)
+    return gr.update(value=markdown)
+
 
 #region MAIN
 # --- Build & Run StateGraph ---
@@ -523,7 +555,7 @@ if __name__ == "__main__":
     
     
     # ----GRADIO-----
-    with gr.Blocks() as demo:
+    with gr.Blocks(title="Call to AIdventure") as demo:
         gr.HTML("""
             <style>
             .large-text textarea {
@@ -544,7 +576,7 @@ if __name__ == "__main__":
             elem_classes="large-text"
             )
             # save_upload= gr.File(label="—or load a saved game—")
-            new_btn = gr.Button("Start New Game")
+            new_btn = gr.Button("Start New Game", visible=False)
             adv_state = gr.State(adventures)
             # load_btn   = gr.Button("Load Saved Game")
 
@@ -559,9 +591,10 @@ if __name__ == "__main__":
                     submit_btn   = gr.Button("Next")
                     combat_btn   = gr.Button("It's a fight! ⚔️", visible=False)
                     state_holder = gr.State()
-                with gr.Column(scale=1):
+                with gr.Column(scale=1) as character_sheet_container:
                     gr.Markdown("### Character Sheet")
-                    stats_panel = gr.JSON()
+                    char_sheet = gr.Markdown("Loading...")
+                    stats_panel = gr.JSON(visible=False)
         
         with gr.Column(visible=False) as combat_screen:
             title_md_combat = gr.Markdown("")
@@ -572,6 +605,7 @@ if __name__ == "__main__":
                     player_health_md = gr.Markdown(render_health_bar(100))
                     combat_action_btn = gr.Button("Next")
                     victory_btn = gr.Button("Victory! 👑", visible=False)
+                    defeat_btn = gr.Button("You died... 🪦", visible=False)
                     
                 with gr.Column(scale=1):
                     monster_md = gr.Markdown("")
@@ -583,7 +617,7 @@ if __name__ == "__main__":
         adv_drop.change(
             fn=show_intro,
             inputs=[adv_drop, adv_state],
-            outputs=[intro_box]
+            outputs=[intro_box, new_btn]
         )
         
         # wire up the “start” buttons
@@ -599,10 +633,9 @@ if __name__ == "__main__":
                 title_md
             ]
         ).then(
-            # once state_holder is set, show the character sheet
-            fn=lambda st: st["player"].model_dump(),
+             fn=show_character_sheet,
             inputs=[state_holder],
-            outputs=[stats_panel]
+            outputs=[char_sheet]
         )
 
         # the in‑game “Go” button remains exactly as before
@@ -612,9 +645,9 @@ if __name__ == "__main__":
             outputs=[narration_screen, combat_screen, story_box, choice_radio, submit_btn, combat_btn, victory_btn, state_holder]
         )
         submit.then(
-            fn=lambda st: st["player"].model_dump(),
+            fn=show_character_sheet,
             inputs=[state_holder],
-            outputs=[stats_panel]
+            outputs=[char_sheet]
         )
         
         #combat start button
@@ -632,7 +665,7 @@ if __name__ == "__main__":
         combat_action_btn.click(
             fn=start_player_action,
             inputs=[state_holder, combat_radio],
-            outputs=[combat_log, combat_radio, combat_action_btn, victory_btn, state_holder]
+            outputs=[combat_log, combat_radio, combat_action_btn, victory_btn, defeat_btn, state_holder]
         ).then(
             fn=update_health_bar,
             inputs=[state_holder],
@@ -648,6 +681,12 @@ if __name__ == "__main__":
             fn=lambda st: st["player"].model_dump(),
             inputs=[state_holder],
             outputs=[stats_panel]
+        )
+        
+        defeat_btn.click(
+            fn=return_to_title_screen,
+            inputs=[],
+            outputs=[landing, narration_screen, combat_screen, adv_drop, intro_box]
         )
         
     demo.launch()

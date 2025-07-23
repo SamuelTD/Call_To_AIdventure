@@ -2324,7 +2324,9 @@
     "intelligence": "-2",
     "wisdom": "-2",
     "charisma": "+0",
-    "description": ""
+    "description": "",
+    "gold_loot": [1, 10],
+    "items_loot": ["torn vest", "broken dagger", "silver tooth"]
   },
   {
     "name": "Giant Ape",
@@ -2636,7 +2638,9 @@
     "intelligence": "–4",
     "wisdom": "–4",
     "charisma": "+0",
-    "description": ""
+    "description": "",
+    "gold_loot": [0, 0],
+    "items_loot": ["spider leg", "phial of venom", "spider fang"]
   },
   {
     "name": "Giant Squid",
@@ -2961,7 +2965,9 @@
     "intelligence": "+0",
     "wisdom": "+0",
     "charisma": "-1",
-    "description": ""
+    "description": "",
+    "gold_loot": [2, 10],
+    "items_loot": ["iron ring", "pouch of salt", "flask of unknown liquid"]
   },
   {
     "name": "Gold Dragon Wyrmling",
@@ -6629,6 +6635,8 @@
     "intelligence": "-4",
     "wisdom": "-4",
     "charisma": "-2",
-    "description": ""
+    "description": "",
+    "gold_loot": [0, 6],
+    "items_loot": ["rotten meat", "gold tooth"]
   }
 ]
