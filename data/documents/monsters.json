@@ -2316,7 +2316,7 @@
   {
     "name": "Ghoul",
     "armor": "12",
-    "HP": "22",
+    "HP": "12",
     "challenge_rating": "1",
     "strength": "+1",
     "dexterity": "+1",
@@ -2630,7 +2630,7 @@
   {
     "name": "Giant Spider",
     "armor": "14",
-    "HP": "26",
+    "HP": "16",
     "challenge_rating": "1",
     "strength": "+2",
     "dexterity": "+2",
@@ -6627,7 +6627,7 @@
   {
     "name": "Zombie",
     "armor": "8",
-    "HP": "15",
+    "HP": "10",
     "challenge_rating": "1/4",
     "strength": "+1",
     "dexterity": "+1",

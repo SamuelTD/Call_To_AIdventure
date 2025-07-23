@@ -57,7 +57,6 @@ class GameState(TypedDict, total=False):
     current_monster_name: str
     current_monster: Monster
     current_choices: list[str]
-    last_choices: list[str]
     current_story: str
     combat_fluff: str
     gold_loot: int
@@ -116,38 +115,34 @@ def prompt_fn(state: AgentState) -> list[SystemMessage | HumanMessage]:
 thinker_agent = ""
 
 summary_template = ChatPromptTemplate.from_template(
-    "You are a concise summarizer for fantasy narrative. You write in the past tense, in the third person and replace the 2nd person by \"the player\"."
-    "Condense the following narrative context into a single paragraph starting with \"Summary of the story :\":\n\n"
-    "{context}"
-)
+    """Tu es un résumeur concis de récits fantasy. Tu écris au passé, à la troisième personne, et tu remplaces la deuxième personne par « le joueur ».
+    Condense le contexte narratif suivant en un seul paragraphe commençant par « Résumé de l’histoire : » :
+    {context}"""
+    )
 
 summary_chain = LLMChain(llm=llm, prompt=summary_template)
 
 choicer_template = ChatPromptTemplate.from_template(
-    "You are role player in an adventure." 
-    "Here is the current state of your character :"
-    "{player_summary}"
-    "Your role is to determine which next courses of action are aceptable based on your character and the current context :"
-    "{context}"
-    "You will ONLY output EXACTLY three (3) actions using the following schema :"
-    "[action1, action2, action3]"
-    "Each action is at maximum 6 words long."
-    "You will refrain from giving actions that are similar to each other."
-    "You can only cast spells if your class is \"wizard\"."
-    "An action can be speech (for example: \"My name is ...\" or \"I'm looking for ...\") if another character in the scene speaks to you."
-    "You MUST offer actions that are different from those actions :"
-    "{last_choices}"
-    "You MUST be reactive to the current narrative. The actions you offer MUST be logical based on the most recent events."
-    "For example if you are falling down a hall you cannot \"take your time to look around\"."
+    """Tu es un personnage-joueur dans une aventure.
+    Voici l’état actuel de ton personnage :
+    {player_summary}
+    Ton rôle est de déterminer quelles actions sont acceptables en fonction de ton personnage et du contexte suivant :
+    {context}
+    Tu dois UNIQUEMENT proposer EXACTEMENT trois (3) actions en utilisant le format suivant :
+    [action1, action2, action3]
+    Chaque action doit comporter au maximum 6 mots.
+    Tu éviteras de proposer des actions similaires entre elles.
+    Tu ne peux lancer des sorts que si ta classe est « wizard ».
+    Une action peut être une phrase (par exemple : « Je m'appelle... » ou « Je cherche... ») si un autre personnage dans la scène s'adresse à toi."""
 )
 choicer_chain = LLMChain(llm=llm, prompt=choicer_template)
 
 # region UTILS
 
-def make_choice(history: list[str], player_summary: str, previous_choices:list[str]) -> str:
+def make_choice(history: list[str], player_summary: str) -> str:
     context = "\n".join(history)
-    last_choices = " - ".join(previous_choices)
-    choices = choicer_chain.predict(context=context, player_summary=player_summary, last_choices=last_choices).strip()
+    
+    choices = choicer_chain.predict(context=context, player_summary=player_summary).strip()
     return choices
 
 def compress_history(history: list[str]) -> list[str]:
@@ -208,12 +203,12 @@ def load_adv_intro(id: str) -> str:
 
 def step_get_input(state: GameState) -> GameState:
     if state["after_combat"]:
-        choices = ["Go onward."]
+        choices = ["Continuer."]
         state["after_combat"] = False
     else:
         if state["story_steps"] > -1:        
             try:
-                choices = [item.strip() for item in make_choice(state["current_story"], state["player"].get_summary(), state["last_choices"]).strip("[]").split(", ")]
+                choices = [item.strip() for item in make_choice(state["current_story"], state["player"].get_summary()).strip("[]").split(", ")]
                 
             except:    
                 choices = ["DEBUG == COULDNT PARSE CHOICER LIST."]  
@@ -251,15 +246,20 @@ def step_agent_think(state: GameState) -> GameState:
 
 def step_prepare_combat(state: GameState) -> GameState:
     prompt = f"""
-    You are a game master for a fantasy role playing game. Your role is to write short (2-3 sentences maximum) 
-    descriptive scenes that will precede a combat. 
-    You base your narration on the following context and player input.
-    Context: {state["current_story"]}
-    Player input: {state["latest_user"]}
-    The enemy the player is about to combat is {state["current_monster_name"]}.
+    Tu es un maître de jeu pour un jeu de rôle fantasy. Ton rôle est d’écrire de courtes scènes descriptives (2 à 3 phrases maximum) qui précèdent un combat.
+    Tu bases ta narration sur le contexte suivant et sur l’action du joueur.
+    Contexte : {state["current_story"]}
+    Action du joueur : {state["latest_user"]}
+    L’ennemi que le joueur s’apprête à affronter est : {state["current_monster_name"]}.
     """
     fluff = story_chain.predict(full_prompt=prompt)
-   
+    
+    # result = run_combat(state["current_monster_name"], state["player"])
+    # if type(result) == str: #Enemy not found in the DB.
+    #     print(result)
+    #     return
+    # if result.get("signal") == 2:
+    #     print(result.get("message", "You have fallen."))
     return {"combat_fluff": fluff}
 
 def step_generate_story(state: GameState) -> GameState:
@@ -274,37 +274,36 @@ def step_generate_story(state: GameState) -> GameState:
     if cmd == "combat":
         enemy = state["current_monster_name"]
         prompt = f"""
-                    Here are the informations on the user :
+                    Voici les informations sur le joueur :
                     {player_summary}
-                    
-                    Here is the adventure so far:
+
+                    Voici le résumé de l’aventure jusqu’à présent :
                     {chat_hist}
 
-                    You are the Game Master for a narrative adventure game. You take continue the story\
-                        based on the events so far. You use a refined, fantasy inspired tone to craft the story.\
-                            You write in the second person.\
-                                Limit each of your answer to four sentences maximum. The user juste vanquished and killed {enemy}.\
-                                    Start your output by "You vanquished {enemy}" and go from there, assuming {enemy} is dead.
-                                    On the corpse the player found {state["gold_loot"]} gold pieces and {state["item_loot"]} as loot. Incorporate those 
-                                    into your narrative.
+                    Tu es le Maître du Jeu d’une aventure narrative. Tu dois poursuivre l’histoire en t’appuyant sur les événements précédents.
+                    Tu utilises un ton raffiné, inspiré de la fantasy, pour raconter l’histoire.
+                    Tu écris à la deuxième personne du singulier.
+                    Limite ta réponse à un maximum de quatre phrases. Le joueur vient de vaincre et de tuer {enemy}.
+                    Commence ta narration par « Tu as vaincu {enemy} », en partant du principe que {enemy} est mort.
+                    Sur le cadavre, le joueur a trouvé {state["gold_loot"]} pièces d’or et {state["item_loot"]} comme butin. Intègre ces éléments dans ton récit.
                     """
         state["player"].gold += state["gold_loot"]
         state["last_cmd"] = "continue"
     else:
         prompt = f"""
-                Here are the informations on the user :
+                Voici les informations sur le joueur :
                 {player_summary}
-                
-                Here is the adventure so far:
+
+                Voici le résumé de l’aventure jusqu’à présent :
                 {chat_hist}
 
-                You are the Game Master for a narrative adventure game. You take the user input and continue the story\
-                    based on the events so far and the user input. You use a refined, fantasy inspired tone to craft the story.\
-                        You write in the second person.\
-                            Limit each of your answer to four sentences maximum. You do your best to make the story go forward without being rushed.
-                            You can and should inflict bad outcomes on the player if it makes sense in the story.
+                Tu es le Maître du Jeu d’un jeu d’aventure narrative. Tu prends en compte l’action du joueur et poursuis l’histoire en fonction des événements précédents et de son choix.
+                Tu utilises un ton raffiné, inspiré de la fantasy, pour raconter l’histoire.
+                Tu écris à la deuxième personne du singulier.
+                Limite ta réponse à un maximum de quatre phrases. Tu fais progresser l’histoire sans précipitation.
+                Tu peux — et tu dois — infliger de mauvaises conséquences au joueur si cela a du sens dans le récit.
 
-                User input: {q}
+                Action du joueur : {q}
                 """
     story = story_chain.predict(full_prompt=prompt)
     print("Story:", story, "\n")
@@ -368,7 +367,7 @@ def build_post_input_graph(builder):
 
 # region GRADIO
 
-def init(index):
+def init(index, adventure):
     # only called once, at app start
     global instruction, thinker_agent
     
@@ -384,19 +383,21 @@ def init(index):
         "combat_result": {"signal": 0, "message": ""},
         "current_story": intro,
         "last_cmd": "continue",
-        "after_combat": False,
-        "last_choices": []
+        "after_combat": False
     }
     
     instruction = (
-    "You are the assistant to a fantasy Game Master.\n"
-    "You have exactly two tools available:\n"
-    "  • combat(enemy: str) — start a fight with that monster\n"
-    "  • nothing(_)        — continue the story without combat\n\n"
-    "You must respond with exactly one JSON object calling one of these tools—no extra text.\n\n"
-    "You may also infer from the user’s description whether one of the known monsters is present—even if they don’t name it.  "
-    "If the user says “Strike” “Attack”, “Slash“ or depicts combat intent against a creature on your list, call combat() with that monster’s exact name.\n\n"
-    f"Available monsters this adventure: {" - ".join(state["adventure"].monsters)}"
+   f"""Tu es l’assistant d’un Maître du Jeu fantasy.
+    Tu disposes exactement de deux outils :
+    • combat(enemy: str) — commence un combat contre ce monstre
+    • nothing(_) — continue l’histoire sans combat
+
+    Tu dois répondre avec un UNIQUE objet JSON appelant l’un de ces outils — aucun texte supplémentaire.
+
+    Tu peux également déduire à partir de la description du joueur si un des monstres connus est présent — même s’il n’est pas nommé explicitement.
+    Si le joueur dit « Frapper », « Attaquer », « Trancher » ou montre une intention de combat contre une créature de ta liste, appelle combat() avec le nom exact de ce monstre.
+
+    Monstres disponibles dans cette aventure : {" - ".join(state["adventure"].monsters)}"""
     )
     
     thinker_agent = create_react_agent(
@@ -419,7 +420,6 @@ def step(choice, state):
             gr.update(visible=True),  gr.update(visible=False), state
     
     # 2) immediately re‐run the “pre” graph on that new state
-    state["last_choices"]=state["current_choices"]
     state = pre_graph.invoke(input=state)
     # 3) extract narrative + next‐choices
     story = state["current_story"]
@@ -436,7 +436,7 @@ def init_load(file_obj):
 
 def start_callback(index, adventures, mode):
     if mode == "new":
-        st = init(index)
+        st = init(index, adventures)
     else:
         pass
         # story, choices, st = init_load(file_obj)
@@ -503,9 +503,9 @@ def render_health_bar(hp_percent: int, length: int = 20, player: bool=True):
     empty_blocks  = length - filled_blocks
     bar = "🟥" * filled_blocks + "⬛" * empty_blocks
     if player:
-        return f"**Your health:** [{bar}] {int(hp_percent)}%"   
+        return f"**Votre santé :** [{bar}] {int(hp_percent)}%"   
     else:
-        return f"**Enemy health:** [{bar}] {int(hp_percent)}%"    
+        return f"**Santé de l'adversaire :** [{bar}] {int(hp_percent)}%"    
 
 def update_health_bar(state):
     return render_health_bar((state["player"].hp/state["player"].max_hp)*100, state["player"].max_hp),\
@@ -513,23 +513,23 @@ def update_health_bar(state):
 
 def return_to_title_screen():
     return gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), gr.update(value=None),\
-        gr.update(value=None, placeholder="Select an adventure to see its intro…")
+        gr.update(value=None, placeholder="Sélectionnez une aventure pour en voir le synopsis…")
 
 def update_character_sheet(player: Player):
     inv = player.inventory if player.inventory else []
     inventory_md = "\n".join([f"- {item}" for item in inv]) if inv else "*None*"
 
     return f"""\
-        **Name:** {player.name}  
-        **Class:** {player.p_class.value}  
+        **Nom:** {player.name}  
+        **Classe:** {player.p_class.value}  
         **Race:** {player.race}  
-        **Money:** 💰 {player.gold} gold  
-        **Health:** ❤️ {player.hp}/{player.max_hp}  
+        **Richesse:** 💰 {player.gold} or  
+        **Santé:** ❤️ {player.hp}/{player.max_hp}  
         
         ---
-        **Weapon:**  
+        **Arme:**  
         {player.weapon.name}  
-        **Inventory:**  
+        **Inventaire:**  
         {inventory_md}
         """
     
@@ -576,17 +576,17 @@ if __name__ == "__main__":
         
         # landing page
         with gr.Column(visible=True) as landing:
-            gr.Markdown("## 🎲 Welcome to AIdventure")
-            adv_drop = gr.Dropdown(choices=[(a.name, i) for i, a in enumerate(adventures)], label="Choose a new adventure", value=None)
+            gr.Markdown("## 🎲 Bienvenue dans l'AIdventure")
+            adv_drop = gr.Dropdown(choices=[(a.name, i) for i, a in enumerate(adventures)], label="Choisissez une nouvelle aventure", value=None)
             intro_box = gr.Textbox(
-            label="Adventure Intro",
+            label="Synopsis de l'aventure",
             interactive=False,
             lines=5,
-            placeholder="Select an adventure to see its intro…",
+            placeholder="Sélectionnez une aventure pour en voir le synopsis…",
             elem_classes="large-text"
             )
             # save_upload= gr.File(label="—or load a saved game—")
-            new_btn = gr.Button("Start New Game", visible=False)
+            new_btn = gr.Button("Commencer la partie", visible=False)
             adv_state = gr.State(adventures)
             # load_btn   = gr.Button("Load Saved Game")
 
@@ -597,25 +597,25 @@ if __name__ == "__main__":
             with gr.Row():
                 with gr.Column(scale=3):
                     story_box    = gr.Textbox(interactive=False, elem_classes="large-text")
-                    choice_radio = gr.Radio(label="Your action")
-                    submit_btn   = gr.Button("Next")
-                    combat_btn   = gr.Button("It's a fight! ⚔️", visible=False)
+                    choice_radio = gr.Radio(label="Votre action")
+                    submit_btn   = gr.Button("Suivant")
+                    combat_btn   = gr.Button("Combattez ! ⚔️", visible=False)
                     state_holder = gr.State()
                 with gr.Column(scale=1) as character_sheet_container:
-                    gr.Markdown("### Character Sheet")
-                    char_sheet = gr.Markdown("Loading...")
+                    gr.Markdown("### Fiche de personnage")
+                    char_sheet = gr.Markdown("Chargement...")
                     stats_panel = gr.JSON(visible=False)
         
         with gr.Column(visible=False) as combat_screen:
             title_md_combat = gr.Markdown("")
             with gr.Row():
                 with gr.Column(scale=3):
-                    combat_log = gr.Textbox(interactive=False, elem_classes="large-text", label="Combat Log")
-                    combat_radio = gr.Radio(label="Your action")
+                    combat_log = gr.Textbox(interactive=False, elem_classes="large-text", label="Journal de combat")
+                    combat_radio = gr.Radio(label="Votre action")
                     player_health_md = gr.Markdown(render_health_bar(100))
-                    combat_action_btn = gr.Button("Next")
-                    victory_btn = gr.Button("Victory! 👑", visible=False)
-                    defeat_btn = gr.Button("You died... 🪦", visible=False)
+                    combat_action_btn = gr.Button("Suivant")
+                    victory_btn = gr.Button("Victoire ! 👑", visible=False)
+                    defeat_btn = gr.Button("Vous avez péri... 🪦", visible=False)
                     
                 with gr.Column(scale=1):
                     monster_md = gr.Markdown("")

@@ -104,3 +104,4 @@ def load_all_adventures() -> List[Adventure]:
 
 if __name__=="__main__":
     save_adventure("emerald_sword")
+    save_adventure("l_epee_d_emeraude")
