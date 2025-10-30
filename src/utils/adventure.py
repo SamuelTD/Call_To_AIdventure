@@ -7,8 +7,8 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 load_dotenv()
-
-file_path = os.getenv("DB_PATH")
+ROOT_DIR = Path(__file__).resolve().parents[2]
+file_path = ROOT_DIR / os.getenv("DB_PATH")
 
 class Adventure(BaseModel):
     id: str = Field(..., description="Unique identifier for the adventure module")
@@ -72,6 +72,12 @@ def load_adventure(adv_id: str) -> Adventure:
     }
     
     return Adventure(**payload)
+
+def load_adv_intro(id: str) -> str:
+    with open(ROOT_DIR / f"data/world/adventures/{id}/intro.txt", "r") as f:
+        intro = f.read()
+        
+    return intro
 
 def load_all_adventures() -> List[Adventure]:
     """

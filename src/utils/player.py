@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field, ValidationError
 import re
 from utils.enums import CharacterClass, PlayerAction
 from utils.equipments import Equipmnent, Weapon
+from pathlib import Path
 
 class Player(BaseModel):
     
@@ -25,7 +26,8 @@ class Player(BaseModel):
         return f"Name: {self.name} \n Gender: {self.gender} \n Race: {self.race} \n Class: {self.p_class} \n Gold: {self.gold} coins \n\
             Weapon : {self.weapon.name}"
 
-file_path = "data/world/other/player.json"
+ROOT_DIR = Path(__file__).resolve().parents[2]
+file_path = ROOT_DIR / "data/world/other/player.json"
 
 def load_player(path=file_path) -> Player:
     try:
