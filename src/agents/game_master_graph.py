@@ -12,12 +12,11 @@ from langchain_chroma import Chroma
 from langchain_groq import ChatGroq
 
 from langgraph.graph import StateGraph, START, END
-from langgraph.prebuilt import create_react_agent
-from langchain.agents import Tool
+from langchain.agents import create_agent
+from langchain.tools import tool
 from langchain_core.prompts import ChatPromptTemplate
-from langchain.chains.llm import LLMChain
 from langchain_core.messages import HumanMessage, SystemMessage
-from langgraph.prebuilt.chat_agent_executor import AgentState
+from langchain.agents import AgentState
 
 from utils.python_utils import clear
 from utils.player import Player, save_player, load_player

@@ -209,3 +209,6 @@ __marimo__/
 db/chroma/
 db/sqlite/data.db
 training/
+
+*.pyc
+uv.lock
