@@ -13,10 +13,11 @@ from langchain_groq import ChatGroq
 
 from langgraph.graph import StateGraph, START, END
 from langchain.agents import create_agent
-from langchain.tools import tool
+from langchain_core.tools import Tool
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain.agents import AgentState
+from langchain_core.output_parsers import StrOutputParser
 
 from utils.python_utils import clear
 from utils.player import Player, save_player, load_player
@@ -77,7 +78,7 @@ vectorstore_loc = Chroma(
 )
 
 # region TOOLS
-# --- Tool definitions ---
+# --- tool definitions ---
 def combat_tool(enemy: str) -> dict:
     return {"action": "combat", "enemy": enemy}
 
@@ -102,7 +103,7 @@ llm = ChatGroq(api_key=GROQ_API_KEY, model="meta-llama/llama-4-maverick-17b-128e
 
 
 template = ChatPromptTemplate.from_template("{full_prompt}")
-story_chain = LLMChain(llm=llm, prompt=template)
+story_chain = template | llm | StrOutputParser()
 
 instruction = ""
 
@@ -120,7 +121,7 @@ summary_template = ChatPromptTemplate.from_template(
     "{context}"
 )
 
-summary_chain = LLMChain(llm=llm, prompt=summary_template)
+summary_chain = summary_template | llm | StrOutputParser()
 
 choicer_template = ChatPromptTemplate.from_template(
     "You are a role player in an adventure." 
@@ -139,14 +140,15 @@ choicer_template = ChatPromptTemplate.from_template(
     "You MUST be reactive to the current narrative. The actions you offer MUST be logical based on the most recent events."
     "For example if you are falling down a hall you cannot \"take your time to look around\"."
 )
-choicer_chain = LLMChain(llm=llm, prompt=choicer_template)
+choicer_chain = choicer_template | llm | StrOutputParser()
 
 # region UTILS
 
 def make_choice(history: list[str], player_summary: str, previous_choices:list[str]) -> str:
     context = "\n".join(history)
     last_choices = " - ".join(previous_choices)
-    choices = choicer_chain.predict(context=context, player_summary=player_summary, last_choices=last_choices).strip()
+    choices = choicer_chain.invoke({"context": context, "player_summary": player_summary, "last_choices": last_choices}).strip()
+    print("DEBUG CHOICES == ", choices)
     return choices
 
 def compress_history(history: list[str]) -> list[str]:
@@ -158,7 +160,7 @@ def compress_history(history: list[str]) -> list[str]:
     to_summarize = "\n".join(history[:-4])
 
     # 3) Get the summary
-    summary = summary_chain.predict(context=to_summarize).strip()
+    summary = summary_chain.invoke({"context": to_summarize}).strip()
 
     # 4) Pull out the trailing four entries
     #    history[-4] = 2nd-to-last user input
@@ -214,7 +216,8 @@ def step_get_input(state: GameState) -> GameState:
             try:
                 choices = [item.strip() for item in make_choice(state["current_story"], state["player"].get_summary(), state["last_choices"]).strip("[]").split(", ")]
                 
-            except:    
+            except Exception as e : 
+                print("ERROR : ", e)   
                 choices = ["DEBUG == COULDNT PARSE CHOICER LIST."]  
             
 
@@ -224,17 +227,32 @@ def step_get_input(state: GameState) -> GameState:
 def step_agent_think(state: GameState) -> GameState:
     # hist = f"Context: {state["current_story"]}\n Player action: {state['latest_user']}"
     
-    messages = [
-    SystemMessage(content=f"Context: {state['current_story']}"),
-    HumanMessage(content=state['latest_user']),
-    ]
+    sys_msg = SystemMessage(
+        content=(
+            "You are the assistant to a fantasy Game Master.\n"
+            "You have exactly two tools available:\n"
+            "  • combat(enemy: str) — start a fight with that monster\n"
+            "  • nothing(_)        — continue the story without combat\n\n"
+            "You must respond with exactly one JSON object calling one of these tools—no extra text.\n\n"
+            "You may also infer from the user’s description whether one of the known monsters is present—even if they don’t name it.  "
+            "If the user says “Strike” “Attack”, “Slash“ or depicts combat intent against a creature on your list, call combat() with that monster’s exact name.\n\n"
+            f"Available monsters this adventure: {" - ".join(state["adventure"].monsters)}"
+            "If unsure, return {'action':'nothing'}."
+        )
+    )
+    human_msg = HumanMessage(
+        content=(
+            f"Context:\n{state.get('current_story','')}\n\n"
+            f"Player input:\n{state.get('latest_user','')}\n"
+        )
+    )
     
-    resp = thinker_agent.invoke({"messages": messages})
+    resp = thinker_agent.invoke({"messages": [sys_msg, human_msg]})
+    # print("AGENT THINKER RESPONSE : ", resp)
     content = resp["messages"][-1].content
-    # print(resp)
-    # print("DEBUG ========== ", content)
+    print("DEBUG ========== ", content)
     m = re.match(r'^<function=(?P<name>\w+)(?P<args>\{.*?\})</function>$', content)
-    # print("DEBUG M ========= ", m)
+    print("DEBUG M ========= ", m)
     if not m:
         tool_msg=json.loads(content)
     else:
@@ -257,7 +275,7 @@ def step_prepare_combat(state: GameState) -> GameState:
     Player input: {state["latest_user"]}
     The enemy the player is about to combat is {state["current_monster_name"]}.
     """
-    fluff = story_chain.predict(full_prompt=prompt)
+    fluff = story_chain.invoke({"full_prompt":prompt}).strip()
    
     return {"combat_fluff": fluff}
 
@@ -305,7 +323,7 @@ def step_generate_story(state: GameState) -> GameState:
 
                 User input: {q}
                 """
-    story = story_chain.predict(full_prompt=prompt)
+    story = story_chain.invoke({"full_prompt":prompt}).strip()
     print("Story:", story, "\n")
     return {"history": state["history"] + [f"You: {q}", f"Story: {story}"], "current_story": story, "story_steps": state["story_steps"] + 1, "last_cmd": state["last_cmd"]}
 
@@ -398,11 +416,7 @@ def init(index):
     f"Available monsters this adventure: {" - ".join(state["adventure"].monsters)}"
     )
     
-    thinker_agent = create_react_agent(
-    model=llm,
-    tools=tools,
-    prompt=prompt_fn
-    )
+    thinker_agent = create_agent(llm, tools)
     
     ctx = pre_graph.invoke(input=state)
     state["current_choices"] = ctx["current_choices"]
