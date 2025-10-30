@@ -124,7 +124,7 @@ summary_template = ChatPromptTemplate.from_template(
 summary_chain = LLMChain(llm=llm, prompt=summary_template)
 
 choicer_template = ChatPromptTemplate.from_template(
-    "You are role player in an adventure." 
+    "You are a role player in an adventure." 
     "Here is the current state of your character :"
     "{player_summary}"
     "Your role is to determine which next courses of action are aceptable based on your character and the current context :"

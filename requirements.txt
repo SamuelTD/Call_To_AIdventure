@@ -6,5 +6,7 @@ langchain
 langchain-community
 langchain-core
 langchain-ollama
+langchain_groq
+langchain_chroma
 langgraph
 dotenv
