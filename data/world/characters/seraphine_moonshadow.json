@@ -1,0 +1,48 @@
+{
+  "id": "seraphine_moonshadow",
+  "type": "character",
+  "name": "Seraphine Moonshadow",
+  "title": "Whisper of the Woods",
+  "age": 129,
+  "race": "Elf",
+  "description": "A slender, ethereal elf with moonlit-silver hair cascading over her shoulders and emerald eyes that gleam with ancient wisdom. She moves with quiet grace, her voice soft yet carrying an otherworldly echo.",
+  "background": {
+    "lineage": [
+      "Daughter of High Druidess Elyndra",
+      "Member of the Moonshadow Circle"
+    ],
+    "notable_events": [
+      {
+        "year": 850,
+        "event": "Led the ritual of the Silver Bloom under the twin moons"
+      },
+      {
+        "year": 1010,
+        "event": "Saved the Whispering Grove from the Blight of Norgath"
+      }
+    ]
+  },
+  "personality_traits": [
+    "Calm under pressure",
+    "Profoundly curious about mortal customs",
+    "Deeply empathetic"
+  ],
+  "relationships": {
+    "allies": ["captain_thorne_blackridge", "druid_elian_of_greenthorn"],
+    "enemies": ["necromancer_calzir_the_void"]
+  },
+  "current_location": "whispering_grove",
+  "inventory": [
+    {
+      "item_id": "luna_staff",
+      "name": "Luna Staff",
+      "description": "A carved staff topped with a glowing moonstone, channeling druidic magic."
+    },
+    {
+      "item_id": "cloak_of_shadows",
+      "name": "Cloak of Shadows",
+      "description": "A silken cloak that blends with moonlight, granting near-invisibility at night."
+    }
+  ],
+  "tags": ["druid", "elf", "mystic"]
+}

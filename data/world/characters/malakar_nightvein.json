@@ -1,0 +1,48 @@
+{
+  "id": "malakar_nightvein",
+  "type": "character",
+  "name": "Malakar Nightvein",
+  "title": "The Dark Lord of Shadowfall",
+  "age": 147,
+  "race": "Unknown",
+  "description": "A tall, gaunt figure draped in a flowing mantle of living darkness, his eyes glowing crimson beneath a horned helm. His voice is a whisper of dread, yet it carries like a thunderclap in the hearts of his foes.",
+  "background": {
+    "lineage": [
+      "Born of forbidden blood beneath the Eclipse Convergence",
+      "Allegedly sired by a fallen star and a mortal sorceress"
+    ],
+    "notable_events": [
+      {
+        "year": 930,
+        "event": "Raised the Obsidian Citadel from the ashes of the Blackened Vale"
+      },
+      {
+        "year": 1008,
+        "event": "Shrouded the Kingdom of Aranthia in perpetual twilight"
+      }
+    ]
+  },
+  "personality_traits": [
+    "Calculating and merciless",
+    "Driven by an insatiable hunger for power",
+    "Commands fear through presence rather than words"
+  ],
+  "relationships": {
+    "allies": ["void_knight_umbral", "witch_matriarch_serethis"],
+    "enemies": ["order_paladin_thelran", "archmage_selene_starglade"]
+  },
+  "current_location": "obsidian_citadel",
+  "inventory": [
+    {
+      "item_id": "baneheart_amulet",
+      "name": "Amulet of Baneheart",
+      "description": "A black gemstone pendant pulsating with malevolent energy, fueling Malakar’s dark sorceries."
+    },
+    {
+      "item_id": "shadowrend_blade",
+      "name": "Shadowrend Blade",
+      "description": "A jagged longsword forged from void-metal, capable of slicing through both armor and soul."
+    }
+  ],
+  "tags": ["dark lord", "villain", "sorcerer"]
+}

@@ -1,0 +1,25 @@
+{
+  "id": "<your-adventure-id>",
+  "name": "<Adventure Title>",
+  "description": "<Brief summary or blurb>",
+  "monsters": [
+    "<MonsterName1>",
+    "<MonsterName2>"
+  ],
+  "npcs": [
+    "<NPCName1>",
+    "<NPCName2>"
+  ],
+  "locations": [
+    "<LocationName1>",
+    "<LocationName2>"
+  ],
+  "items": [
+    "<ItemName1>",
+    "<ItemName2>"
+  ],
+  "tags": [
+    "<tag1>",
+    "<tag2>"
+  ]
+}

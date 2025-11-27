@@ -1,0 +1,82 @@
+{
+  "id": "ravenhold_grand_library",
+  "type": "location",
+  "name": "Ravenhold Grand Library",
+  "region": "Capital City of Ravenhold",
+  "description": "An immense, vaulted hall of marble and rosewood, its high arched ceilings lined with floating lanterns. Endless shelves groan under the weight of tomes, scrolls, and curiosities from across the realm. Whispered rumors speak of secret alcoves where forbidden knowledge lurks.",
+  "history": {
+    "founding": {
+      "year": 812,
+      "founder": "Archmage Iseldra of the Sunforge Circle",
+      "purpose": "To gather and safeguard all written lore of the known world."
+    },
+    "notable_events": [
+      {
+        "year": 950,
+        "event": "Survived the Siege of Ravenhold unscathed thanks to the Arcane Wards"
+      },
+      {
+        "year": 998,
+        "event": "Discovery of the Lost Codex of Azharoth in the subterranean Vault of Whispers"
+      },
+      {
+        "year": 1003,
+        "event": "Deciphering of the Starfall Prophecy in the Celestial Wing"
+      }
+    ]
+  },
+  "features": [
+    {
+      "feature_id": "vault_of_whispers",
+      "name": "Vault of Whispers",
+      "description": "A hidden underground chamber where ancient parchments murmur their contents to those who listen."
+    },
+    {
+      "feature_id": "celestial_wing",
+      "name": "Celestial Wing",
+      "description": "A lofty alcove dedicated to astronomical and prophetic texts, its domed roof inlaid with constellations in silver filigree."
+    },
+    {
+      "feature_id": "arcane_wards",
+      "name": "Arcane Wards",
+      "description": "Glowing runic barriers woven into the walls, repelling fire, scrying, and undead alike."
+    }
+  ],
+  "inhabitants": [
+    {
+      "npc_id": "lulu_the_wise",
+      "role": "Head Librarian",
+      "notes": "Keeper of the Codex of Whispers and master of arcane cataloging."
+    },
+    {
+      "npc_id": "scribe_traelis_of_silverquill",
+      "role": "Chief Archivist",
+      "notes": "Responsible for cataloguing new acquisitions and preserving fragile scrolls."
+    },
+    {
+      "npc_id": "ethan_the_page",
+      "role": "Library Page",
+      "notes": "Runs errands, fetches volumes, and scrubs ink-stained floors."
+    }
+  ],
+  "connections": {
+    "adjacent_locations": [
+      "royal_palace_ravenhold",
+      "market_square_ravenhold",
+      "sunforge_archives"
+    ],
+    "secret_passages": [
+      {
+        "to": "vault_of_whispers_entrance",
+        "method": "Rotate the second lectern in the Celestial Wing to reveal a hidden stair."
+      }
+    ]
+  },
+  "tags": [
+    "library",
+    "knowledge",
+    "arcane",
+    "historic",
+    "secret"
+  ]
+}

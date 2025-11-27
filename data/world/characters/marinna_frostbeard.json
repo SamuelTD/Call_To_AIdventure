@@ -1,0 +1,48 @@
+{
+  "id": "marinna_frostbeard",
+  "type": "character",
+  "name": "Marinna Frostbeard",
+  "title": "Silver Tongue of Frostgate",
+  "age": 45,
+  "race": "Dwarf",
+  "description": "A sturdy dwarf with braided silver hair, steely blue eyes, and a scar across her left cheek. Renowned for her sharp negotiating skills and boisterous laugh echoing through the Frostgate bazaar.",
+  "background": {
+    "lineage": [
+      "Fourth daughter of Clan Frostbeard",
+      "Granddaughter of Thane Balrik Frostbeard"
+    ],
+    "notable_events": [
+      {
+        "year": 992,
+        "event": "Broached peace talks with the Mountain Orcs at the Stonefall Summit"
+      },
+      {
+        "year": 1001,
+        "event": "Exposed the Iron Veil smuggling ring in the Frostgate tunnels"
+      }
+    ]
+  },
+  "personality_traits": [
+    "Silver-tongued",
+    "Unwavering loyalty to kin",
+    "Fond of strong ale and storytelling"
+  ],
+  "relationships": {
+    "allies": ["thane_brungar_ironhammer", "merchant_giselle_nighthaven"],
+    "enemies": ["smuggler_boss_karash_the_veiled"]
+  },
+  "current_location": "frostgate_bazaar",
+  "inventory": [
+    {
+      "item_id": "fine_merchant_scales",
+      "name": "Fine Merchant Scales",
+      "description": "A precision set of brass scales, used to weigh jewels and precious metals."
+    },
+    {
+      "item_id": "frostbeard_signet_ring",
+      "name": "Frostbeard Signet Ring",
+      "description": "A heavy iron ring engraved with the Frostbeard clan crest, used to seal trade agreements."
+    }
+  ],
+  "tags": ["merchant", "dwarf", "negotiator"]
+}

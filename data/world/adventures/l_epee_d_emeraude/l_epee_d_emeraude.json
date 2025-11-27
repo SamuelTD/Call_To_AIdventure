@@ -1,0 +1,24 @@
+{
+  "id": "l_epee_d_emeraude",
+  "name": "L'épée d'Emeraude",
+  "description": "Sous le regard attentif du roi Eoric de Ravenhold, une mission périlleuse t’a été confiée : t’aventurer dans la légendaire Tombe des Draconiens, un labyrinthe de pierre ancienne et de malédictions à demi murmurées. Les rumeurs parlent de pièges dressés par des seigneurs dragons depuis longtemps morts, et de gardiens façonnés dans la flamme vivante, tous placés là pour protéger l’Épée d’Émeraude — une lame que l’on dit vibrer du souffle même des dragons. Armé de peu, sinon de ton courage et de la bénédiction solennelle du roi, tu dois arpenter ces couloirs oubliés et affronter les échos d’un pouvoir draconique. Car seule cette épreuve te permettra de revendiquer, pour Ravenhold, ce trésor mythique.",
+  "monsters": [
+    "Zombie",
+    "Kobold Warrior",
+    "Goblin Warrior",
+    "Giant Spider",
+    "Ghoul"
+  ],
+  "npcs": [
+    
+  ],
+  "locations": [
+    
+  ],
+  "items": [
+    
+  ],
+  "tags": [
+    
+  ]
+}

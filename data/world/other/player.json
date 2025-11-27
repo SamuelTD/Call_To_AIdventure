@@ -1,0 +1,24 @@
+{
+  "name": "Stan",
+  "race": "Dwarf",
+  "p_class": "fighter",
+  "gold": 0,
+  "max_hp": 30,
+  "hp": 30,
+  "xp": 0,
+  "gender": "Male",
+  "actions": [
+    "attack",
+    "defend"
+  ],
+  "inventory": [],
+  "weapon": {
+    "name": "Sword",
+    "id": "eqp_00",
+    "min_dmg": 1,
+    "max_dmg": 6
+  },
+  "strength": 0,
+  "agility": 0,
+  "arcana": 0
+}
