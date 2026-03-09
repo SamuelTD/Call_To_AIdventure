@@ -1,11 +1,12 @@
 import json
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import Field, ValidationError
+from utils.serialization import SerializableModel
 import re
 from utils.enums import CharacterClass, PlayerAction
 from utils.equipments import Equipmnent, Weapon
 from pathlib import Path
 
-class Player(BaseModel):
+class Player(SerializableModel):
     
     name: str
     race: str
@@ -17,7 +18,7 @@ class Player(BaseModel):
     gender: str = Field(default="male")
     actions: list[PlayerAction] = Field(default=[PlayerAction.ATTACK, PlayerAction.DEFEND])
     inventory: list = Field(default=[])
-    weapon: Weapon = Field(default=Weapon(name="Sword", min=2, max_dmg=6))
+    weapon: Weapon = Field(default_factory=lambda: Weapon(name="Sword", min_dmg=2, max_dmg=6))
     strength: int = Field(default=0)
     agility: int = Field(default=0)
     arcana: int = Field(default=0)

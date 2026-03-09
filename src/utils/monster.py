@@ -1,4 +1,5 @@
-from pydantic import BaseModel, Field
+from pydantic import Field
+from utils.serialization import SerializableModel
 import sqlite3
 from typing import Optional, Tuple, List
 import os, json
@@ -8,7 +9,7 @@ load_dotenv()
 
 file_path = os.getenv("DB_PATH")
 
-class Monster(BaseModel):
+class Monster(SerializableModel):
     
     name: str
     armor: int

@@ -1,37 +1,61 @@
-from uuid import uuid4
-from game.models import SaveGame
-from utils.player import load_player
-from utils.adventure import load_all_adventures, load_adv_intro
+from langgraph.graph import StateGraph
 
-def initialize_game(user, adventure_id: str):
-    adventures = load_all_adventures()
-    adventure = next(a for a in adventures if a.id == adventure_id)
-    intro = load_adv_intro(adventure_id)
-    player = load_player()
+from agents.game_master_graph import (
+    GameState,
+    build_pre_input_graph,
+    build_post_input_graph,
+)
 
-    state = {
-        "player": player,
-        "adventure": adventure,
-        "history": [intro],
-        "story_steps": 0,
-        "should_end": False,
-        "combat_result": {"signal": 0, "message": ""},
-        "current_story": intro,
-        "last_cmd": "continue",
-        "after_combat": False,
-        "last_choices": [],
-        "current_choices": []
-    }
+class GameEngine:
 
-    # optional DB persistence
-    if user and not user.is_anonymous:
-        SaveGame.objects.update_or_create(
-            user=user,
-            adventure_id=adventure_id,
-            defaults={
-                "adventure_name": adventure.name,
-                "state": state,
-            },
+    def __init__(self):
+        self.pre_graph = build_pre_input_graph(StateGraph(GameState))
+        self.post_graph = build_post_input_graph(StateGraph(GameState))
+
+    def initialize(self, state):
+        """
+        Equivalent of the old init() Gradio logic.
+        """
+        ctx = self.pre_graph.invoke(input=state)
+        state["current_choices"] = ctx["current_choices"]
+        return state
+
+    def step(self, state, choice):
+        """
+        Equivalent of the old step() function.
+        """
+        state = self.post_graph.invoke(
+            input={**state, "latest_user": choice}
         )
 
-    return state, intro, adventure
+        # combat trigger
+        if state["last_cmd"] == "combat":
+            return {
+                "state": state,
+                "mode": "combat",
+                "combat_fluff": state["combat_fluff"],
+            }
+
+        # run pre graph again
+        state["last_choices"] = state["current_choices"]
+
+        state = self.pre_graph.invoke(input=state)
+
+        return {
+            "state": state,
+            "mode": "story",
+            "story": state["current_story"],
+            "choices": state["current_choices"],
+        }
+      
+      
+# SINGLETON PATTERN  
+_engine = None
+
+def get_engine():
+    global _engine
+
+    if _engine is None:
+        _engine = GameEngine()
+
+    return _engine

@@ -1,5 +1,6 @@
 from typing import List, Optional, Any
-from pydantic import BaseModel, Field
+from pydantic import Field
+from utils.serialization import SerializableModel
 import json
 import sqlite3
 import os
@@ -10,7 +11,7 @@ load_dotenv()
 ROOT_DIR = Path(__file__).resolve().parents[2]
 file_path = ROOT_DIR / os.getenv("DB_PATH")
 
-class Adventure(BaseModel):
+class Adventure(SerializableModel):
     id: str = Field(..., description="Unique identifier for the adventure module")
     name: str = Field(..., description="Title of the adventure module")
     description: Optional[str] = Field(None, description="Brief summary or blurb")
