@@ -4,10 +4,11 @@ import sqlite3
 from typing import Optional, Tuple, List
 import os, json
 from dotenv import load_dotenv
+from utils.pathing import env_project_path
 
 load_dotenv()
 
-file_path = os.getenv("DB_PATH")
+file_path = env_project_path("DB_PATH", "db/sqlite/data.db")
 
 class Monster(SerializableModel):
     

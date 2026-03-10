@@ -3,6 +3,9 @@ from django.views import View
 from django.views.generic import TemplateView
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from django.shortcuts import render
+from utils.adventure import load_all_adventures
+from utils.player import Player
 
 from game.services.tools import initialize_game, rebuild_state, make_serializable_state
 from game.services.game_engine import get_engine
@@ -10,6 +13,51 @@ from game.services.game_engine import get_engine
 from uuid import uuid4
 import json
 
+# region HELPERS
+def build_character_sheet(player):
+    inv = player.inventory if player.inventory else []
+    inventory_md = "\n".join([f"- {item}" for item in inv]) if inv else "*None*"
+
+    return {
+        "name": player.name,
+        "class": player.p_class.value,
+        "race": player.race,
+        "gold": player.gold,
+        "hp": player.hp,
+        "max_hp": player.max_hp,
+        "weapon": player.weapon.name if player.weapon else "None",
+        "inventory": inv,
+        "inventory_markdown": inventory_md,
+    }
+
+def build_character_sheet(player):
+    inv = player.inventory if player.inventory else []
+
+    return {
+        "name": player.name,
+        "class": player.p_class.value,
+        "race": player.race,
+        "gold": player.gold,
+        "hp": player.hp,
+        "max_hp": player.max_hp,
+        "weapon": player.weapon.name if player.weapon else "None",
+        "inventory": inv,
+    }
+
+def build_combat_state_payload(state):
+    player = state["player"]
+    monster = state.get("current_monster")
+
+    return {
+        "monster_name": state.get("current_monster_name"),
+        "player_hp": player.hp,
+        "player_max_hp": player.max_hp,
+        "monster_hp": monster.HP if monster else None,
+        "monster_max_hp": monster.max_HP if monster else None,
+        "player": build_character_sheet(player),
+    }
+
+# region VIEWS
 class HealthView(View):
     def get(self, request):
         return JsonResponse({"status": "ok"})
@@ -86,34 +134,161 @@ class StepGameView(View):
         if not choice:
             return JsonResponse({"error": "choice is required"}, status=400)
 
-        # 1️⃣ Load state from session
+        # Load state from session
         serialized_state = request.session.get("game_state")
 
         if not serialized_state:
             return JsonResponse({"error": "No active game"}, status=400)
 
-        # 2️⃣ Rebuild runtime objects
+        # Rebuild runtime objects
         state = rebuild_state(serialized_state)
 
-        # 3️⃣ Run engine step
+        # Run engine step
         engine = get_engine()
         result = engine.step(state, choice)
 
         state = result["state"]
 
-        # 4️⃣ Save updated state
+        # Save updated state
         request.session["game_state"] = make_serializable_state(state)
         request.session.modified = True
 
-        # 5️⃣ Return response depending on mode
+        player_sheet = build_character_sheet(state["player"])
+        
+        # Return response depending on mode
+        # COMBAT BRANCH
         if result["mode"] == "combat":
+            request.session["game_state"] = make_serializable_state(state)
+            request.session["combat_fluff"] = result["combat_fluff"]
+            request.session.modified = True
+            
             return JsonResponse({
                 "mode": "combat",
-                "combat_fluff": result["combat_fluff"]
+                "combat_fluff": result["combat_fluff"],
+                "player": player_sheet
             })
 
+        # STORY BRANCH
+        request.session["combat_fluff"] = ""        
         return JsonResponse({
             "mode": "story",
             "story": result["story"],
-            "choices": result["choices"]
+            "choices": result["choices"],
+            "player": player_sheet
+        })
+
+@method_decorator(csrf_exempt, name="dispatch")
+class StartCombatView(View):
+
+    def post(self, request):
+
+        serialized_state = request.session.get("game_state")
+
+        if not serialized_state:
+            return JsonResponse({"error": "No active game"}, status=400)
+
+        state = rebuild_state(serialized_state)
+
+        engine = get_engine()
+        result = engine.start_combat(state)
+
+        state = result["state"]
+
+        request.session["game_state"] = make_serializable_state(state)
+        request.session.modified = True
+
+        return JsonResponse(result)
+        
+@method_decorator(csrf_exempt, name="dispatch")
+class CombatActionView(View):
+
+    def post(self, request):
+
+        try:
+            body = json.loads(request.body.decode("utf-8"))
+        except json.JSONDecodeError:
+            return HttpResponseBadRequest("Invalid JSON")
+
+        action = body.get("action")
+
+        if not action:
+            return JsonResponse({"error": "action is required"}, status=400)
+
+        serialized_state = request.session.get("game_state")
+
+        if not serialized_state:
+            return JsonResponse({"error": "No active game"}, status=400)
+
+        state = rebuild_state(serialized_state)
+
+        engine = get_engine()
+        result = engine.combat_action(state, action)
+
+        state = result["state"]
+
+        request.session["game_state"] = make_serializable_state(state)
+        request.session.modified = True
+        result["player"] = build_character_sheet(state["player"])
+        return JsonResponse(result)
+
+@method_decorator(csrf_exempt, name="dispatch")
+class CombatStateView(View):
+
+    def get(self, request):
+        serialized_state = request.session.get("game_state")
+
+        if not serialized_state:
+            return JsonResponse({"error": "No active game"}, status=400)
+
+        state = rebuild_state(serialized_state)
+
+        if not state.get("current_monster_name"):
+            return JsonResponse({"error": "No active combat"}, status=400)
+
+        payload = build_combat_state_payload(state)
+        payload["combat_fluff"] = request.session.get("combat_fluff", "")
+
+        return JsonResponse(payload)
+
+class CombatPageView(TemplateView):
+    template_name = "game/combat.html"    
+    
+class LandingPageView(TemplateView):
+    template_name = "game/landing.html"
+
+class AdventureListView(View):
+    def get(self, request):
+        adventures = load_all_adventures()
+
+        data = [
+            {
+                "id": adv.id,
+                "name": adv.name,
+                "description": adv.description,
+            }
+            for adv in adventures
+        ]
+
+        return JsonResponse({"adventures": data})
+    
+class PlayPageView(TemplateView):
+    template_name = "game/play.html"
+    
+@method_decorator(csrf_exempt, name="dispatch")
+class CurrentGameStateView(View):
+
+    def get(self, request):
+        serialized_state = request.session.get("game_state")
+
+        if not serialized_state:
+            return JsonResponse({"error": "No active game"}, status=400)
+
+        state = rebuild_state(serialized_state)
+        player_sheet = build_character_sheet(state["player"])
+
+        return JsonResponse({
+            "story": state.get("current_story", ""),
+            "choices": state.get("current_choices", []),
+            "player": player_sheet,
+            "adventure_name": state["adventure"].name if state.get("adventure") else "Adventure",
         })

@@ -1,0 +1,27 @@
+from pydantic import BaseModel, Field, field_validator
+from typing import List
+
+class ChoiceOutput(BaseModel):
+    choices: List[str] = Field(
+        description="Exactly three distinct short player actions."
+    )
+
+    @field_validator("choices")
+    @classmethod
+    def validate_choices(cls, value: List[str]) -> List[str]:
+        if len(value) != 3:
+            raise ValueError("choices must contain exactly 3 items")
+
+        cleaned = [item.strip() for item in value]
+
+        if any(not item for item in cleaned):
+            raise ValueError("choices cannot contain empty strings")
+
+        if any(len(item.split()) > 6 for item in cleaned):
+            raise ValueError("each choice must be at most 6 words long")
+
+        lowered = [item.lower() for item in cleaned]
+        if len(set(lowered)) != 3:
+            raise ValueError("choices must be distinct")
+
+        return cleaned

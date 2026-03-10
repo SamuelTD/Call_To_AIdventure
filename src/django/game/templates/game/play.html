@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Play - Call To AIdventure</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: #eee;
+        }
+
+        .page {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 20px;
+        }
+
+        .title-bar {
+            margin-bottom: 20px;
+        }
+
+        .title-bar h1 {
+            margin: 0;
+            font-size: 2rem;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 3fr 1fr;
+            gap: 20px;
+            align-items: start;
+        }
+
+        .panel {
+            background: #1c1c1c;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+        }
+
+        .story-box {
+            min-height: 240px;
+            white-space: pre-wrap;
+            line-height: 1.6;
+            background: #151515;
+            border: 1px solid #2f2f2f;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+            font-size: 1.05rem;
+        }
+
+        .choices-box {
+            margin-top: 10px;
+        }
+
+        .choice-item {
+            display: block;
+            margin-bottom: 12px;
+            padding: 10px 12px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background: #171717;
+            cursor: pointer;
+        }
+
+        .choice-item:hover {
+            background: #202020;
+        }
+
+        .choice-item input {
+            margin-right: 10px;
+        }
+
+        .action-row {
+            margin-top: 18px;
+            display: flex;
+            gap: 12px;
+        }
+
+        button {
+            padding: 12px 18px;
+            border-radius: 8px;
+            border: none;
+            background: #6d4aff;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #5b3de0;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-top: 14px;
+            color: #bbb;
+        }
+
+        .error {
+            color: #ff7b7b;
+        }
+
+        .sheet-block {
+            margin-bottom: 16px;
+        }
+
+        .sheet-block h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1rem;
+            color: #ccc;
+            border-bottom: 1px solid #333;
+            padding-bottom: 6px;
+        }
+
+        .sheet-line {
+            margin-bottom: 8px;
+        }
+
+        ul.inventory {
+            margin: 0;
+            padding-left: 18px;
+        }
+
+        .top-links {
+            margin-bottom: 16px;
+        }
+
+        .top-links a {
+            color: #b8a7ff;
+            text-decoration: none;
+        }
+
+        .top-links a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="top-links">
+            <a href="{% url 'landing' %}">← Back to landing</a>
+        </div>
+
+        <div class="title-bar">
+            <h1 id="adventure-title">Loading adventure...</h1>
+        </div>
+
+        <div class="layout">
+            <div class="panel">
+                <div id="story-box" class="story-box">Loading story...</div>
+
+                <div class="choices-box">
+                    <h3>What do you do?</h3>
+                    <form id="choice-form">
+                        <div id="choices-container"></div>
+
+                        <div class="action-row">
+                            <button type="submit" id="next-btn">Next</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div id="status" class="status"></div>
+            </div>
+
+            <div class="panel">
+                <h2>Character Sheet</h2>
+
+                <div class="sheet-block">
+                    <h3>Identity</h3>
+                    <div class="sheet-line"><strong>Name:</strong> <span id="player-name"></span></div>
+                    <div class="sheet-line"><strong>Class:</strong> <span id="player-class"></span></div>
+                    <div class="sheet-line"><strong>Race:</strong> <span id="player-race"></span></div>
+                </div>
+
+                <div class="sheet-block">
+                    <h3>Stats</h3>
+                    <div class="sheet-line"><strong>Gold:</strong> <span id="player-gold"></span></div>
+                    <div class="sheet-line"><strong>HP:</strong> <span id="player-hp"></span></div>
+                </div>
+
+                <div class="sheet-block">
+                    <h3>Equipment</h3>
+                    <div class="sheet-line"><strong>Weapon:</strong> <span id="player-weapon"></span></div>
+                </div>
+
+                <div class="sheet-block">
+                    <h3>Inventory</h3>
+                    <ul id="player-inventory" class="inventory"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_STATE_URL = "{% url 'api_state' %}";
+        const API_STEP_URL = "{% url 'api_step' %}";
+        const PLAY_URL = "{% url 'play' %}";
+        const COMBAT_URL = "{% url 'combat' %}";
+
+        const titleEl = document.getElementById("adventure-title");
+        const storyBox = document.getElementById("story-box");
+        const choicesContainer = document.getElementById("choices-container");
+        const choiceForm = document.getElementById("choice-form");
+        const nextBtn = document.getElementById("next-btn");
+        const statusBox = document.getElementById("status");
+
+        const playerName = document.getElementById("player-name");
+        const playerClass = document.getElementById("player-class");
+        const playerRace = document.getElementById("player-race");
+        const playerGold = document.getElementById("player-gold");
+        const playerHp = document.getElementById("player-hp");
+        const playerWeapon = document.getElementById("player-weapon");
+        const playerInventory = document.getElementById("player-inventory");
+
+        function renderChoices(choices) {
+            choicesContainer.innerHTML = "";
+
+            if (!choices || choices.length === 0) {
+                choicesContainer.innerHTML = "<p>No choices available.</p>";
+                return;
+            }
+
+            choices.forEach((choice, index) => {
+                const label = document.createElement("label");
+                label.className = "choice-item";
+
+                const input = document.createElement("input");
+                input.type = "radio";
+                input.name = "choice";
+                input.value = choice;
+                input.checked = index === 0;
+
+                label.appendChild(input);
+                label.appendChild(document.createTextNode(choice));
+                choicesContainer.appendChild(label);
+            });
+        }
+
+        function renderPlayer(player) {
+            playerName.textContent = player.name || "";
+            playerClass.textContent = player.class || "";
+            playerRace.textContent = player.race || "";
+            playerGold.textContent = player.gold ?? "";
+            playerHp.textContent = `${player.hp ?? ""}/${player.max_hp ?? ""}`;
+            playerWeapon.textContent = player.weapon || "";
+
+            playerInventory.innerHTML = "";
+
+            if (player.inventory && player.inventory.length > 0) {
+                for (const item of player.inventory) {
+                    const li = document.createElement("li");
+                    li.textContent = item;
+                    playerInventory.appendChild(li);
+                }
+            } else {
+                const li = document.createElement("li");
+                li.textContent = "None";
+                playerInventory.appendChild(li);
+            }
+        }
+
+        async function loadState() {
+            statusBox.textContent = "Loading current game...";
+
+            try {
+                const response = await fetch(API_STATE_URL);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || "Failed to load game state");
+                }
+
+                titleEl.textContent = data.adventure_name || "Adventure";
+                storyBox.textContent = data.story || "";
+                renderChoices(data.choices || []);
+                renderPlayer(data.player || {});
+                statusBox.textContent = "";
+            } catch (err) {
+                console.error(err);
+                statusBox.textContent = err.message;
+                statusBox.classList.add("error");
+            }
+        }
+
+        choiceForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const selected = document.querySelector('input[name="choice"]:checked');
+
+            if (!selected) {
+                statusBox.textContent = "Please select an action.";
+                statusBox.classList.add("error");
+                return;
+            }
+
+            statusBox.classList.remove("error");
+            statusBox.textContent = "Advancing story...";
+            nextBtn.disabled = true;
+
+            try {
+                const response = await fetch(API_STEP_URL, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        choice: selected.value
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || "Step failed");
+                }
+
+                if (data.player) {
+                    renderPlayer(data.player);
+                }
+
+                if (data.mode === "combat") {
+                    sessionStorage.setItem("combat_fluff", data.combat_fluff || "");
+                    window.location.href = COMBAT_URL;
+                    return;
+                }
+
+                storyBox.textContent = data.story || "";
+                renderChoices(data.choices || []);
+                statusBox.textContent = "";
+            } catch (err) {
+                console.error(err);
+                statusBox.textContent = err.message;
+                statusBox.classList.add("error");
+            } finally {
+                nextBtn.disabled = false;
+            }
+        });
+
+        loadState();
+    </script>
+</body>
+</html>

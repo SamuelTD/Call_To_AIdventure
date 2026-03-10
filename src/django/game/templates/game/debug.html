@@ -51,7 +51,7 @@
     <div class="box">
         <h2>Start Game</h2>
         <label for="adventureId">Adventure ID</label>
-        <input id="adventureId" type="text" value="adv01" />
+        <input id="adventureId" type="text" value="emerald_sword" />
 
         <button id="startBtn">Start Game</button>
     </div>
@@ -72,6 +72,9 @@
 
         <button id="stepBtn">Send to /api/step</button>
     </div>
+
+    <button onclick="startCombat()">Start Combat</button>
+    <button onclick="combatAction()">Combat Action</button>
 
     <div class="box">
         <h2>Latest Response</h2>
@@ -102,6 +105,30 @@
                 status: response.status,
                 data
             };
+        }
+
+        async function startCombat() {
+            const response = await fetch("/api/combat/start", {
+                method: "POST"
+            })
+
+            const data = await response.json()
+
+            console.log(data)
+            }
+
+        async function combatAction() {
+            const action = document.getElementById("combatAction").value
+
+            const response = await fetch("/api/combat/action", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action })
+            })
+
+            const data = await response.json()
+
+            console.log(data)
         }
 
         document.getElementById("startBtn").addEventListener("click", async () => {
@@ -136,6 +163,7 @@
             output.textContent = JSON.stringify(result, null, 2);
 
         });
+
     </script>
 </body>
 </html>

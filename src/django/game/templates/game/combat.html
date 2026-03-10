@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Combat - Call To AIdventure</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: #eee;
+        }
+
+        .page {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 20px;
+        }
+
+        .title-bar {
+            margin-bottom: 20px;
+        }
+
+        .title-bar h1 {
+            margin: 0;
+            font-size: 2rem;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 3fr 1fr;
+            gap: 20px;
+            align-items: start;
+        }
+
+        .panel {
+            background: #1c1c1c;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+        }
+
+        .combat-fluff {
+            white-space: pre-wrap;
+            line-height: 1.6;
+            background: #151515;
+            border: 1px solid #2f2f2f;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+
+        .combat-log {
+            min-height: 220px;
+            white-space: pre-wrap;
+            line-height: 1.6;
+            background: #151515;
+            border: 1px solid #2f2f2f;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+
+        .choice-item {
+            display: block;
+            margin-bottom: 12px;
+            padding: 10px 12px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            background: #171717;
+            cursor: pointer;
+        }
+
+        .choice-item:hover {
+            background: #202020;
+        }
+
+        .choice-item input {
+            margin-right: 10px;
+        }
+
+        .action-row {
+            margin-top: 18px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        button, .button-link {
+            padding: 12px 18px;
+            border-radius: 8px;
+            border: none;
+            background: #6d4aff;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        button:hover, .button-link:hover {
+            background: #5b3de0;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-top: 14px;
+            color: #bbb;
+        }
+
+        .error {
+            color: #ff7b7b;
+        }
+
+        .hp-block {
+            margin-bottom: 18px;
+        }
+
+        .hp-label {
+            margin-bottom: 6px;
+            font-weight: bold;
+        }
+
+        .hp-bar-wrap {
+            width: 100%;
+            height: 20px;
+            background: #2a2a2a;
+            border-radius: 999px;
+            overflow: hidden;
+            border: 1px solid #3a3a3a;
+        }
+
+        .hp-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #7c4dff, #9c6bff);
+            width: 0%;
+            transition: width 0.25s ease;
+        }
+
+        .sheet-block {
+            margin-bottom: 16px;
+        }
+
+        .sheet-block h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1rem;
+            color: #ccc;
+            border-bottom: 1px solid #333;
+            padding-bottom: 6px;
+        }
+
+        .sheet-line {
+            margin-bottom: 8px;
+        }
+
+        ul.inventory {
+            margin: 0;
+            padding-left: 18px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .victory-box, .defeat-box {
+            margin-top: 18px;
+            padding: 16px;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+
+        .victory-box {
+            background: rgba(80, 180, 120, 0.15);
+            border: 1px solid rgba(80, 180, 120, 0.4);
+        }
+
+        .defeat-box {
+            background: rgba(180, 80, 80, 0.15);
+            border: 1px solid rgba(180, 80, 80, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="title-bar">
+            <h1 id="combat-title">Combat</h1>
+        </div>
+
+        <div class="layout">
+            <div class="panel">
+                <div id="combat-fluff" class="combat-fluff hidden"></div>
+                <div id="combat-log" class="combat-log">Loading combat...</div>
+
+                <form id="combat-form">
+                    <div id="combat-choices"></div>
+
+                    <div class="action-row">
+                        <button type="submit" id="combat-btn">Next</button>
+                        <a href="{% url 'play' %}" id="return-play-btn" class="button-link hidden">Continue</a>
+                        <a href="{% url 'landing' %}" id="return-landing-btn" class="button-link hidden">Return to title</a>
+                    </div>
+                </form>
+
+                <div id="victory-box" class="victory-box hidden">Victory!</div>
+                <div id="defeat-box" class="defeat-box hidden">You died...</div>
+
+                <div id="status" class="status"></div>
+            </div>
+
+            <div class="panel">
+                <div class="sheet-block">
+                    <h3>Enemy</h3>
+                    <div class="sheet-line"><strong>Name:</strong> <span id="monster-name"></span></div>
+                </div>
+
+                <div class="hp-block">
+                    <div class="hp-label">Player HP: <span id="player-hp-text"></span></div>
+                    <div class="hp-bar-wrap">
+                        <div id="player-hp-bar" class="hp-bar"></div>
+                    </div>
+                </div>
+
+                <div class="hp-block">
+                    <div class="hp-label">Enemy HP: <span id="monster-hp-text"></span></div>
+                    <div class="hp-bar-wrap">
+                        <div id="monster-hp-bar" class="hp-bar"></div>
+                    </div>
+                </div>
+
+                <div class="sheet-block">
+                    <h3>Character Sheet</h3>
+                    <div class="sheet-line"><strong>Name:</strong> <span id="player-name"></span></div>
+                    <div class="sheet-line"><strong>Class:</strong> <span id="player-class"></span></div>
+                    <div class="sheet-line"><strong>Race:</strong> <span id="player-race"></span></div>
+                    <div class="sheet-line"><strong>Gold:</strong> <span id="player-gold"></span></div>
+                    <div class="sheet-line"><strong>Weapon:</strong> <span id="player-weapon"></span></div>
+                </div>
+
+                <div class="sheet-block">
+                    <h3>Inventory</h3>
+                    <ul id="player-inventory" class="inventory"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_COMBAT_STATE_URL = "{% url 'api_combat_state' %}";
+        const API_COMBAT_START_URL = "{% url 'api_combat_start' %}";
+        const API_COMBAT_ACTION_URL = "{% url 'api_combat_action' %}";
+
+        const combatTitle = document.getElementById("combat-title");
+        const combatFluff = document.getElementById("combat-fluff");
+        const combatLog = document.getElementById("combat-log");
+        const combatChoices = document.getElementById("combat-choices");
+        const combatForm = document.getElementById("combat-form");
+        const combatBtn = document.getElementById("combat-btn");
+        const returnPlayBtn = document.getElementById("return-play-btn");
+        const returnLandingBtn = document.getElementById("return-landing-btn");
+        const victoryBox = document.getElementById("victory-box");
+        const defeatBox = document.getElementById("defeat-box");
+        const statusBox = document.getElementById("status");
+
+        const monsterName = document.getElementById("monster-name");
+        const playerHpText = document.getElementById("player-hp-text");
+        const monsterHpText = document.getElementById("monster-hp-text");
+        const playerHpBar = document.getElementById("player-hp-bar");
+        const monsterHpBar = document.getElementById("monster-hp-bar");
+
+        const playerName = document.getElementById("player-name");
+        const playerClass = document.getElementById("player-class");
+        const playerRace = document.getElementById("player-race");
+        const playerGold = document.getElementById("player-gold");
+        const playerWeapon = document.getElementById("player-weapon");
+        const playerInventory = document.getElementById("player-inventory");
+
+        let combatStarted = false;
+
+        function setHpBar(barEl, current, max) {
+            const safeMax = max || 1;
+            const pct = Math.max(0, Math.min(100, (current / safeMax) * 100));
+            barEl.style.width = `${pct}%`;
+        }
+
+        function renderChoices(choices) {
+            combatChoices.innerHTML = "";
+
+            if (!choices || choices.length === 0) {
+                combatChoices.innerHTML = "<p>No combat actions available.</p>";
+                return;
+            }
+
+            choices.forEach((choice, index) => {
+                const label = document.createElement("label");
+                label.className = "choice-item";
+
+                const input = document.createElement("input");
+                input.type = "radio";
+                input.name = "combat_action";
+                input.value = choice;
+                input.checked = index === 0;
+
+                label.appendChild(input);
+                label.appendChild(document.createTextNode(choice));
+                combatChoices.appendChild(label);
+            });
+        }
+
+        function renderPlayer(player) {
+            if (!player) return;
+
+            playerName.textContent = player.name || "";
+            playerClass.textContent = player.class || "";
+            playerRace.textContent = player.race || "";
+            playerGold.textContent = player.gold ?? "";
+            playerWeapon.textContent = player.weapon || "";
+
+            playerInventory.innerHTML = "";
+            if (player.inventory && player.inventory.length > 0) {
+                for (const item of player.inventory) {
+                    const li = document.createElement("li");
+                    li.textContent = item;
+                    playerInventory.appendChild(li);
+                }
+            } else {
+                const li = document.createElement("li");
+                li.textContent = "None";
+                playerInventory.appendChild(li);
+            }
+        }
+
+        function renderCombatState(data) {
+            combatTitle.textContent = data.monster_name ? `⚔️ ${data.monster_name}` : "Combat";
+            monsterName.textContent = data.monster_name || "";
+
+            playerHpText.textContent = `${data.player_hp ?? 0}/${data.player_max_hp ?? 0}`;
+            monsterHpText.textContent = `${data.monster_hp ?? 0}/${data.monster_max_hp ?? 0}`;
+
+            setHpBar(playerHpBar, data.player_hp ?? 0, data.player_max_hp ?? 1);
+            setHpBar(monsterHpBar, data.monster_hp ?? 0, data.monster_max_hp ?? 1);
+
+            renderPlayer(data.player);
+        }
+
+        async function loadCombatState() {
+            statusBox.textContent = "Loading combat...";
+
+            try {
+                const response = await fetch(API_COMBAT_STATE_URL);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || "Failed to load combat state");
+                }
+
+                renderCombatState(data);
+
+                const fluff = data.combat_fluff || sessionStorage.getItem("combat_fluff") || "";
+                if (fluff) {
+                    combatFluff.textContent = fluff;
+                    combatFluff.classList.remove("hidden");
+                }
+
+                statusBox.textContent = "";
+            } catch (err) {
+                console.error(err);
+                statusBox.textContent = err.message;
+                statusBox.classList.add("error");
+            }
+        }
+
+        async function startCombatIfNeeded() {
+            if (combatStarted) return;
+            combatStarted = true;
+
+            statusBox.textContent = "Starting combat...";
+
+            try {
+                const response = await fetch(API_COMBAT_START_URL, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || "Failed to start combat");
+                }
+
+                renderCombatState(data);
+                renderChoices(data.choices || []);
+                combatLog.textContent = data.combat_log || "";
+                statusBox.textContent = "";
+            } catch (err) {
+                console.error(err);
+                statusBox.textContent = err.message;
+                statusBox.classList.add("error");
+            }
+        }
+
+        combatForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const selected = document.querySelector('input[name="combat_action"]:checked');
+            if (!selected) {
+                statusBox.textContent = "Please select a combat action.";
+                statusBox.classList.add("error");
+                return;
+            }
+
+            statusBox.classList.remove("error");
+            statusBox.textContent = "Resolving combat...";
+            combatBtn.disabled = true;
+
+            try {
+                const response = await fetch(API_COMBAT_ACTION_URL, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        action: selected.value
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || "Combat action failed");
+                }
+
+                renderCombatState(data);
+                renderPlayer(data.player);
+                combatLog.textContent = data.combat_log || "";
+
+                if (data.mode === "combat") {
+                    renderChoices(data.choices || []);
+                    statusBox.textContent = "";
+                    return;
+                }
+
+                combatChoices.innerHTML = "";
+                combatBtn.classList.add("hidden");
+
+                if (data.mode === "victory") {
+                    victoryBox.classList.remove("hidden");
+                    returnPlayBtn.classList.remove("hidden");
+                    statusBox.textContent = "You won the fight.";
+                    return;
+                }
+
+                if (data.mode === "defeat") {
+                    defeatBox.classList.remove("hidden");
+                    returnLandingBtn.classList.remove("hidden");
+                    statusBox.textContent = "You were defeated.";
+                    return;
+                }
+
+            } catch (err) {
+                console.error(err);
+                statusBox.textContent = err.message;
+                statusBox.classList.add("error");
+            } finally {
+                if (!victoryBox.classList.contains("hidden") || !defeatBox.classList.contains("hidden")) {
+                    combatBtn.disabled = true;
+                } else {
+                    combatBtn.disabled = false;
+                }
+            }
+        });
+
+        loadCombatState().then(startCombatIfNeeded);
+    </script>
+</body>
+</html>
