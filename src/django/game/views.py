@@ -33,20 +33,6 @@ def build_character_sheet(player):
         "inventory_markdown": inventory_md,
     }
 
-def build_character_sheet(player):
-    inv = player.inventory if player.inventory else []
-
-    return {
-        "name": player.name,
-        "class": player.p_class.value,
-        "race": player.race,
-        "gold": player.gold,
-        "hp": player.hp,
-        "max_hp": player.max_hp,
-        "weapon": player.weapon.name if player.weapon else "None",
-        "inventory": inv,
-    }
-
 def build_combat_state_payload(state):
     player = state["player"]
     monster = state.get("current_monster")
