@@ -6,9 +6,10 @@ from agents.game_master_graph import (
     GameState,
     build_pre_input_graph,
     build_post_input_graph,
+    initialize_graph_runtime
 )
 from langchain.agents import create_agent
-from agents.game_master_graph import tools, llm
+from agents.game_master_graph_legacy import tools, llm
 
 class GameEngine:
 
@@ -17,22 +18,9 @@ class GameEngine:
         self.post_graph = build_post_input_graph(StateGraph(GameState))
 
     def initialize(self, state):
-        from agents import game_master_graph as graph_module
-
-        graph_module.thinker_agent = create_agent(llm, tools)
-
-        graph_module.instruction = (
-            "You are the assistant to a fantasy Game Master.\n"
-            "You have exactly two tools available:\n"
-            "  • combat(enemy: str) — start a fight with that monster\n"
-            "  • nothing(_)        — continue the story without combat\n\n"
-            "You must respond with exactly one JSON object calling one of these tools—no extra text.\n\n"
-            "You may also infer from the user’s description whether one of the known monsters is present—even if they don’t name it.\n\n"
-            f"Available monsters this adventure: {' - '.join(state['adventure'].monsters)}"
-        )
-
+        
+        initialize_graph_runtime(state)
         ctx = self.pre_graph.invoke(input=state)
-
         state["current_choices"] = ctx["current_choices"]
 
         return state
