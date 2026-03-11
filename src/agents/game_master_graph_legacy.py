@@ -24,6 +24,7 @@ from utils.player import Player, save_player, load_player
 from utils.monster import Monster
 from utils.adventure import Adventure, load_adventure, load_all_adventures
 from utils.enums import PlayerAction
+from utils.pathing import CHROMA_DIR
 from combat.core import setup_combat, player_action, monster_attack
 from llm.models import ChoiceOutput
 
@@ -69,12 +70,12 @@ class GameState(TypedDict, total=False):
 # --- Embeddings & Vector Stores ---
 ollama_embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
 vectorstore_char = Chroma(
-    client=chromadb.PersistentClient(path="db/chroma"),
+    client=chromadb.PersistentClient(path=str(CHROMA_DIR)),
     collection_name=CHAR_COL,
     embedding_function=ollama_embeddings
 )
 vectorstore_loc = Chroma(
-    client=chromadb.PersistentClient(path="db/chroma"),
+    client=chromadb.PersistentClient(path=str(CHROMA_DIR)),
     collection_name=LOC_COL,
     embedding_function=ollama_embeddings
 )

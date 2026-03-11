@@ -9,7 +9,7 @@ from agents.game_master_graph import (
     initialize_graph_runtime
 )
 from langchain.agents import create_agent
-from agents.game_master_graph_legacy import tools, llm
+from agents.game_master_graph import tools, llm
 
 class GameEngine:
 
