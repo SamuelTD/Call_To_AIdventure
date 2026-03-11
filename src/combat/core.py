@@ -53,6 +53,12 @@ def monster_attack():
         combat_log.append("You have died!")
     return player.hp <= 0, combat_log
 
+def get_current_combat_state():
+    return {
+        "player": player,
+        "monster": current_monster,
+    }
+
 # def run_combat(enemy: str, player: Player):
 #     global current_monster
     

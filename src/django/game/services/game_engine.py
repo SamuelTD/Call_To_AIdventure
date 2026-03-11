@@ -1,6 +1,6 @@
 from langgraph.graph import StateGraph
 import random
-from combat.core import setup_combat, player_action, monster_attack
+from combat.core import setup_combat, player_action, monster_attack, get_current_combat_state
 from utils.enums import PlayerAction
 from agents.game_master_graph import (
     GameState,
@@ -70,6 +70,12 @@ class GameEngine:
             state["player"]
         )
 
+        combat_state = get_current_combat_state()
+        if combat_state.get("player") is not None:
+            state["player"] = combat_state["player"]
+        if combat_state.get("monster") is not None:
+            state["current_monster"] = combat_state["monster"]
+        
         payload = self._build_combat_payload(state, combat_log)
 
         return {
@@ -85,6 +91,12 @@ class GameEngine:
         if not player_has_won:
             player_has_died, combat_log = monster_attack()
 
+        combat_state = get_current_combat_state()
+        if combat_state.get("player") is not None:
+            state["player"] = combat_state["player"]
+        if combat_state.get("monster") is not None:
+            state["current_monster"] = combat_state["monster"]
+        
         if not player_has_died and not player_has_won:
             payload = self._build_combat_payload(state, combat_log)
             return {
@@ -126,6 +138,8 @@ class GameEngine:
             "monster_max_hp": monster.max_HP if monster else None,
             "choices": [a.value for a in player.actions] if player else [],
         }
+        
+
 # SINGLETON PATTERN  
 _engine = None
 

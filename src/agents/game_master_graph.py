@@ -337,8 +337,13 @@ def step_generate_story(state: GameState) -> GameState:
                                     On the corpse the player found {state["gold_loot"]} gold pieces and {state["item_loot"]} as loot. Incorporate those 
                                     into your narrative.
                     """
+        
         state["player"].gold += state["gold_loot"]
         state["last_cmd"] = "continue"
+        state["current_monster"] = None
+        state["current_monster_name"] = None
+        state["gold_loot"] = 0
+        state["item_loot"] = []
     else:
         prompt = f"""
                 Here are the informations on the user :
@@ -356,6 +361,7 @@ def step_generate_story(state: GameState) -> GameState:
                 User input: {q}
                 """
     story = story_chain.invoke({"full_prompt":prompt}).strip()
+    
     print("Story:", story, "\n")
     return {"history": state["history"] + [f"You: {q}", f"Story: {story}"], "current_story": story, "story_steps": state["story_steps"] + 1, "last_cmd": state["last_cmd"]}
 

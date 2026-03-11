@@ -202,7 +202,7 @@
 
                     <div class="action-row">
                         <button type="submit" id="combat-btn">Next</button>
-                        <a href="{% url 'play' %}" id="return-play-btn" class="button-link hidden">Continue</a>
+                        <button type="button" id="return-play-btn" class="hidden">Continue</button>
                         <a href="{% url 'landing' %}" id="return-landing-btn" class="button-link hidden">Return to title</a>
                     </div>
                 </form>
@@ -217,6 +217,7 @@
                 <div class="sheet-block">
                     <h3>Enemy</h3>
                     <div class="sheet-line"><strong>Name:</strong> <span id="monster-name"></span></div>
+                    <img id="monster-image" src="" alt="Monster image" style="width:100%; border-radius:8px; margin-top:12px; display:none;">
                 </div>
 
                 <div class="hp-block">
@@ -254,6 +255,9 @@
         const API_COMBAT_STATE_URL = "{% url 'api_combat_state' %}";
         const API_COMBAT_START_URL = "{% url 'api_combat_start' %}";
         const API_COMBAT_ACTION_URL = "{% url 'api_combat_action' %}";
+        const API_COMBAT_IMAGE_URL = "{% url 'api_combat_image' %}";
+        const API_STEP_URL = "{% url 'api_step' %}";
+        const PLAY_URL = "{% url 'play' %}";
 
         const combatTitle = document.getElementById("combat-title");
         const combatFluff = document.getElementById("combat-fluff");
@@ -336,6 +340,7 @@
         }
 
         function renderCombatState(data) {
+            const monsterImage = document.getElementById("monster-image");
             combatTitle.textContent = data.monster_name ? `⚔️ ${data.monster_name}` : "Combat";
             monsterName.textContent = data.monster_name || "";
 
@@ -346,6 +351,14 @@
             setHpBar(monsterHpBar, data.monster_hp ?? 0, data.monster_max_hp ?? 1);
 
             renderPlayer(data.player);
+
+            if (data.monster_name) {
+                monsterImage.src = `${API_COMBAT_IMAGE_URL}?t=${Date.now()}`;
+                monsterImage.style.display = "block";
+            } 
+            else {
+                monsterImage.style.display = "none";
+            }
         }
 
         async function loadCombatState() {
@@ -477,6 +490,36 @@
             }
         });
 
+        returnPlayBtn.addEventListener("click", async () => {
+            returnPlayBtn.disabled = true;
+            statusBox.textContent = "Returning to the story...";
+
+            try {
+                const response = await fetch(API_STEP_URL, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        choice: "Go onward."
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || "Failed to resume story");
+                }
+
+                window.location.href = PLAY_URL;
+            } catch (err) {
+                console.error(err);
+                statusBox.textContent = err.message;
+                statusBox.classList.add("error");
+                returnPlayBtn.disabled = false;
+            }
+        });
+        
         loadCombatState().then(startCombatIfNeeded);
     </script>
 </body>

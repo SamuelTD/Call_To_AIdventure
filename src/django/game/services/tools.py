@@ -7,14 +7,14 @@ from utils.monster import Monster
 def make_serializable_state(state: dict) -> dict:
     safe = state.copy()
 
-    if state.get("player"):
-        safe["player"] = state["player"].to_dict()
+    if safe.get("player"):
+        safe["player"] = safe["player"].to_dict()
 
-    if state.get("adventure"):
-        safe["adventure"] = state["adventure"].to_dict()
+    if safe.get("adventure"):
+        safe["adventure"] = safe["adventure"].to_dict()
 
-    if state.get("current_monster"):
-        state["current_monster"] = safe["current_monster"].to_dict()
+    if safe.get("current_monster"):
+        safe["current_monster"] = safe["current_monster"].to_dict()
 
     return safe
 
