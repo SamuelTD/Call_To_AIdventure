@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import Field
+from utils.serialization import SerializableModel
 
-class Equipmnent(BaseModel):
+class Equipmnent(SerializableModel):
     
     name: str
     id: str = Field(default="eqp_00")

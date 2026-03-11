@@ -1,0 +1,7 @@
+{
+    "python.analysis.extraPaths": [
+        "./src",
+        "./src/django"
+    ],
+    "python.envFile": "${workspaceFolder}/.env"
+}

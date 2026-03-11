@@ -25,6 +25,7 @@ from utils.monster import Monster
 from utils.adventure import Adventure, load_adventure, load_all_adventures
 from utils.enums import PlayerAction
 from combat.core import setup_combat, player_action, monster_attack
+from llm.models import ChoiceOutput
 
 import gradio as gr
 from functools import partial
@@ -43,6 +44,7 @@ LOC_COL = "locations"
 EMBEDDING_MODEL = "mxbai-embed-large:latest"
 LLM_MODEL = "llama3.2:latest"
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_MODEL= os.getenv("GROQ_MODEL")
 
 # --- Define Graph State Schema ---
 class GameState(TypedDict, total=False):
@@ -98,7 +100,7 @@ tools = [
 
 #region LLM AND AGENTS
 # llm = ChatGroq(api_key=GROQ_API_KEY, model="llama-3.3-70b-versatile", temperature=0.5, model_kwargs={"seed": seed})
-llm = ChatGroq(api_key=GROQ_API_KEY, model="meta-llama/llama-4-maverick-17b-128e-instruct", temperature=0.5, model_kwargs={"seed": seed})
+llm = ChatGroq(api_key=GROQ_API_KEY, model=GROQ_MODEL, temperature=0.5, model_kwargs={"seed": seed})
 
 
 
@@ -124,32 +126,58 @@ summary_template = ChatPromptTemplate.from_template(
 summary_chain = summary_template | llm | StrOutputParser()
 
 choicer_template = ChatPromptTemplate.from_template(
-    "You are a role player in an adventure." 
-    "Here is the current state of your character :"
-    "{player_summary}"
-    "Your role is to determine which next courses of action are aceptable based on your character and the current context :"
-    "{context}"
-    "You will ONLY output EXACTLY three (3) actions using the following schema :"
-    "[action1, action2, action3]"
-    "Each action is at maximum 6 words long."
-    "You will refrain from giving actions that are similar to each other."
-    "You can only cast spells if your class is \"wizard\"."
-    "An action can be speech (for example: \"My name is ...\" or \"I'm looking for ...\") if another character in the scene speaks to you."
-    "You MUST offer actions that are different from those actions :"
-    "{last_choices}"
-    "You MUST be reactive to the current narrative. The actions you offer MUST be logical based on the most recent events."
-    "For example if you are falling down a hall you cannot \"take your time to look around\"."
+    "You are a role player in a fantasy adventure.\n"
+    "Here is the current state of your character:\n"
+    "{player_summary}\n\n"
+    "Here is the current narrative context:\n"
+    "{context}\n\n"
+    "Return exactly three possible next actions for the player.\n"
+    "Rules:\n"
+    "- Each action must be at most 6 words long.\n"
+    "- The three actions must be meaningfully different.\n"
+    "- Only offer actions that make sense in the immediate current situation.\n"
+    "- Only offer spellcasting if the class is wizard.\n"
+    "- If another character is actively speaking, one action may be dialogue.\n"
+    "- Do not repeat or closely paraphrase these previous choices:\n"
+    "{last_choices}\n"
 )
-choicer_chain = choicer_template | llm | StrOutputParser()
+
+# choicer_template = ChatPromptTemplate.from_template(
+#     "You are a role player in an adventure." 
+#     "Here is the current state of your character :"
+#     "{player_summary}"
+#     "Your role is to determine which next courses of action are aceptable based on your character and the current context :"
+#     "{context}"
+#     "You will ONLY output EXACTLY three (3) actions using the following schema :"
+#     "[action1, action2, action3]"
+#     "Each action is at maximum 6 words long."
+#     "You will refrain from giving actions that are similar to each other."
+#     "You can only cast spells if your class is \"wizard\"."
+#     "An action can be speech (for example: \"My name is ...\" or \"I'm looking for ...\") if another character in the scene speaks to you."
+#     "You MUST offer actions that are different from those actions :"
+#     "{last_choices}"
+#     "You MUST be reactive to the current narrative. The actions you offer MUST be logical based on the most recent events."
+#     "For example if you are falling down a hall you cannot \"take your time to look around\"."
+# )
+# choicer_chain = choicer_template | llm | StrOutputParser()
+
+choicer_model = llm.with_structured_output(ChoiceOutput)
+choicer_chain = choicer_template | choicer_model
 
 # region UTILS
 
 def make_choice(history: list[str], player_summary: str, previous_choices:list[str]) -> str:
     context = "\n".join(history)
     last_choices = " - ".join(previous_choices)
-    choices = choicer_chain.invoke({"context": context, "player_summary": player_summary, "last_choices": last_choices}).strip()
-    print("DEBUG CHOICES == ", choices)
-    return choices
+    
+    result = choicer_chain.invoke({
+        "context": context,
+        "player_summary": player_summary,
+        "last_choices": last_choices,
+    })
+
+    print("DEBUG CHOICES == ", result)
+    return result.choices
 
 def compress_history(history: list[str]) -> list[str]:
     # Only summarize when there are more than 4 entries
@@ -214,11 +242,15 @@ def step_get_input(state: GameState) -> GameState:
     else:
         if state["story_steps"] > -1:        
             try:
-                choices = [item.strip() for item in make_choice(state["current_story"], state["player"].get_summary(), state["last_choices"]).strip("[]").split(", ")]
+                choices = make_choice(
+                    state["history"],
+                    state["player"].get_summary(),
+                    state["last_choices"]
+                )
                 
             except Exception as e : 
                 print("ERROR : ", e)   
-                choices = ["DEBUG == COULDNT PARSE CHOICER LIST."]  
+                choices = ["Move forward [Debug]"]  
             
 
     return {"current_choices": choices, "after_combat": False}
@@ -305,8 +337,13 @@ def step_generate_story(state: GameState) -> GameState:
                                     On the corpse the player found {state["gold_loot"]} gold pieces and {state["item_loot"]} as loot. Incorporate those 
                                     into your narrative.
                     """
+        
         state["player"].gold += state["gold_loot"]
         state["last_cmd"] = "continue"
+        state["current_monster"] = None
+        state["current_monster_name"] = None
+        state["gold_loot"] = 0
+        state["item_loot"] = []
     else:
         prompt = f"""
                 Here are the informations on the user :
@@ -324,6 +361,7 @@ def step_generate_story(state: GameState) -> GameState:
                 User input: {q}
                 """
     story = story_chain.invoke({"full_prompt":prompt}).strip()
+    
     print("Story:", story, "\n")
     return {"history": state["history"] + [f"You: {q}", f"Story: {story}"], "current_story": story, "story_steps": state["story_steps"] + 1, "last_cmd": state["last_cmd"]}
 

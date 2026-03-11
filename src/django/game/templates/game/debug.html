@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Call to AIdventure Debug</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 2rem;
+            max-width: 900px;
+        }
+
+        .box {
+            border: 1px solid #ccc;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 8px;
+        }
+
+        label {
+            display: block;
+            margin-top: 0.5rem;
+            margin-bottom: 0.25rem;
+            font-weight: bold;
+        }
+
+        input, select, textarea, button {
+            width: 100%;
+            padding: 0.6rem;
+            margin-bottom: 0.75rem;
+            box-sizing: border-box;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        pre {
+            background: #111;
+            color: #0f0;
+            padding: 1rem;
+            border-radius: 8px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>Call to AIdventure — Debug Page</h1>
+
+    <div class="box">
+        <h2>Start Game</h2>
+        <label for="adventureId">Adventure ID</label>
+        <input id="adventureId" type="text" value="emerald_sword" />
+
+        <button id="startBtn">Start Game</button>
+    </div>
+
+    <div class="box">
+        <h2>Send Input</h2>
+        <label for="playerInput">Player Input</label>
+        <textarea id="playerInput" rows="4" placeholder="Type something...">hello engine</textarea>
+
+        <button id="playBtn">Send to /api/play</button>
+    </div>
+
+    <div class="box">
+        <h2>Game Step</h2>
+
+        <label>Choice</label>
+        <input id="choiceInput" value="Go onward." />
+
+        <button id="stepBtn">Send to /api/step</button>
+    </div>
+
+    <button onclick="startCombat()">Start Combat</button>
+    <button onclick="combatAction()">Combat Action</button>
+
+    <div class="box">
+        <h2>Latest Response</h2>
+        <pre id="output">No response yet.</pre>
+    </div>
+
+    <script>
+        const output = document.getElementById("output");
+
+        async function postJson(url, payload) {
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
+
+            let data;
+            try {
+                data = await response.json();
+            } catch {
+                data = { error: "Non-JSON response", status: response.status };
+            }
+
+            return {
+                ok: response.ok,
+                status: response.status,
+                data
+            };
+        }
+
+        async function startCombat() {
+            const response = await fetch("/api/combat/start", {
+                method: "POST"
+            })
+
+            const data = await response.json()
+
+            console.log(data)
+            }
+
+        async function combatAction() {
+            const action = document.getElementById("combatAction").value
+
+            const response = await fetch("/api/combat/action", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action })
+            })
+
+            const data = await response.json()
+
+            console.log(data)
+        }
+
+        document.getElementById("startBtn").addEventListener("click", async () => {
+            const adventureId = document.getElementById("adventureId").value;
+
+            const result = await postJson("/api/start", {
+                adventure_id: adventureId
+            });
+
+            output.textContent = JSON.stringify(result, null, 2);
+        });
+
+        document.getElementById("playBtn").addEventListener("click", async () => {
+            const playerInput = document.getElementById("playerInput").value;
+
+            const result = await postJson("/api/play", {
+                session_id: "debug-session",
+                input: playerInput
+            });
+
+            output.textContent = JSON.stringify(result, null, 2);
+        });
+
+        document.getElementById("stepBtn").addEventListener("click", async () => {
+
+            const choice = document.getElementById("choiceInput").value;
+
+            const result = await postJson("/api/step", {
+                choice: choice
+            });
+
+            output.textContent = JSON.stringify(result, null, 2);
+
+        });
+
+    </script>
+</body>
+</html>

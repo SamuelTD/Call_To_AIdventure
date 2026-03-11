@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Call To AIdventure</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: #eee;
+        }
+
+        .page {
+            max-width: 1000px;
+            margin: 40px auto;
+            padding: 24px;
+        }
+
+        .panel {
+            background: #1c1c1c;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 2rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        select, button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+        select {
+            background: #222;
+            color: #eee;
+            margin-bottom: 20px;
+        }
+
+        button {
+            background: #6d4aff;
+            color: white;
+            cursor: pointer;
+            border: none;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: #5b3de0;
+        }
+
+        button.hidden {
+            display: none;
+        }
+
+        .intro-box {
+            margin-top: 20px;
+            min-height: 140px;
+            white-space: pre-wrap;
+            line-height: 1.5;
+            background: #151515;
+            border: 1px solid #2f2f2f;
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .status {
+            margin-top: 12px;
+            color: #bbb;
+            font-size: 0.95rem;
+        }
+
+        .error {
+            color: #ff7b7b;
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="panel">
+            <h1>🎲 Call To AIdventure</h1>
+
+            <label for="adventure-select">Choose an adventure</label>
+            <select id="adventure-select">
+                <option value="">Loading adventures...</option>
+            </select>
+
+            <div id="intro-box" class="intro-box">
+                Select an adventure to see its introduction.
+            </div>
+
+            <div id="status" class="status"></div>
+
+            <button id="start-btn" class="hidden">Start Adventure</button>
+        </div>
+    </div>
+
+    <script>
+        const API_ADVENTURES_URL = "{% url 'api_adventures' %}";
+        const API_START_URL = "{% url 'api_start' %}";
+
+        const adventureSelect = document.getElementById("adventure-select");
+        const introBox = document.getElementById("intro-box");
+        const startBtn = document.getElementById("start-btn");
+        const statusBox = document.getElementById("status");
+
+        let adventures = [];
+
+        async function loadAdventures() {
+            statusBox.textContent = "Loading adventures...";
+
+            try {
+                const response = await fetch(API_ADVENTURES_URL);
+                const data = await response.json();
+
+                adventures = data.adventures || [];
+
+                adventureSelect.innerHTML = '<option value="">-- Select an adventure --</option>';
+
+                for (const adv of adventures) {
+                    const option = document.createElement("option");
+                    option.value = adv.id;
+                    option.textContent = adv.name;
+                    adventureSelect.appendChild(option);
+                }
+
+                statusBox.textContent = "";
+            } catch (err) {
+                console.error(err);
+                statusBox.textContent = "Failed to load adventures.";
+                statusBox.classList.add("error");
+            }
+        }
+
+        adventureSelect.addEventListener("change", () => {
+            const selectedId = adventureSelect.value;
+            const adv = adventures.find(a => a.id === selectedId);
+
+            if (!adv) {
+                introBox.textContent = "Select an adventure to see its introduction.";
+                startBtn.classList.add("hidden");
+                return;
+            }
+
+            introBox.textContent = adv.description || "No description available.";
+            startBtn.classList.remove("hidden");
+        });
+
+        startBtn.addEventListener("click", async () => {
+            const selectedId = adventureSelect.value;
+
+            if (!selectedId) return;
+
+            startBtn.disabled = true;
+            statusBox.textContent = "Starting adventure...";
+
+            try {
+                const response = await fetch(API_START_URL, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        adventure_id: selectedId
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || "Failed to start adventure");
+                }
+
+                window.location.href = "/play/";
+            } catch (err) {
+                console.error(err);
+                statusBox.textContent = err.message;
+                statusBox.classList.add("error");
+                startBtn.disabled = false;
+            }
+        });
+
+        loadAdventures();
+    </script>
+</body>
+</html>
