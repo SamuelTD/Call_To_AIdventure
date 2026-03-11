@@ -299,24 +299,3 @@ class CurrentGameStateView(View):
             "player": player_sheet,
             "adventure_name": state["adventure"].name if state.get("adventure") else "Adventure",
         })
-
-class CurrentMonsterImageView(View):
-    def get(self, request):
-        serialized_state = request.session.get("game_state")
-
-        if not serialized_state:
-            raise Http404("No active game")
-
-        state = rebuild_state(serialized_state)
-        monster_name = state.get("current_monster_name")
-
-        if not monster_name:
-            raise Http404("No active monster")
-
-        filename = f"{monster_name.replace(' ', '_')}.png"
-        image_path = PROJECT_ROOT / "data" / "pictures" / filename
-
-        if not image_path.exists():
-            raise Http404(f"Monster image not found: {filename}")
-
-        return FileResponse(open(image_path, "rb"), content_type="image/png")

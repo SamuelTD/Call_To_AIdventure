@@ -1,10 +1,12 @@
 import os
 import requests
 from typing import List
+from langchain_ollama import OllamaEmbeddings
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 EMBED_MODEL = os.getenv("EMBED_MODEL", "mxbai-embed-large:latest")
 
+ollama_embeddings = OllamaEmbeddings(model=EMBED_MODEL)
 
 def embed(text: str) -> List[float]:
     """

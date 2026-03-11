@@ -1,9 +1,10 @@
 from typing import List, Dict, Any, Optional
 import chromadb
+from utils.pathing import CHROMA_DIR
 from chromadb.api.models.Collection import Collection
 from chromadb.errors import NotFoundError
 
-client = chromadb.PersistentClient(path="db/chroma")
+client = chromadb.PersistentClient(path=str(CHROMA_DIR))
 
 def get_or_create_collection(name: str) -> Collection:
     """

@@ -6,29 +6,20 @@ import random
 
 from dotenv import load_dotenv
 from typing_extensions import TypedDict
-from typing import List
-
-from pydantic import BaseModel, Field, field_validator
 
 load_dotenv()
 
-import chromadb
-from langchain_ollama import OllamaEmbeddings
-from langchain_chroma import Chroma
-from langchain_groq import ChatGroq
-
 from langgraph.graph import StateGraph, START, END
-from langchain.agents import create_agent
 from langchain.agents import AgentState
-from langchain_core.tools import Tool
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.output_parsers import StrOutputParser
 
 from utils.player import Player
 from utils.monster import Monster
 from utils.adventure import Adventure, load_adventure
 
+from agents.tools import tools
+from agents.schemas import ChoiceOutput
 from agents.prompts import (
     CHOOSER_TEMPLATE,
     SUMMARY_TEMPLATE,
@@ -37,6 +28,13 @@ from agents.prompts import (
     build_pre_combat_fluff_prompt,
     build_post_combat_story_prompt,
     build_regular_story_prompt,
+)
+
+from agents.llm_runtime import (
+    story_chain,
+    summary_chain,
+    choicer_chain,
+    build_thinker_agent,
 )
 #endregion
 
@@ -73,110 +71,13 @@ class GameState(TypedDict, total=False):
     after_combat: bool
 #endregion
 
-
-#region STRUCTURED OUTPUT SCHEMA
-class ChoiceOutput(BaseModel):
-    choices: List[str] = Field(
-        description="Exactly three distinct short player actions."
-    )
-
-    @field_validator("choices")
-    @classmethod
-    def validate_choices(cls, value: List[str]) -> List[str]:
-        if len(value) != 3:
-            raise ValueError("choices must contain exactly 3 items")
-
-        cleaned = [item.strip() for item in value]
-
-        if any(not item for item in cleaned):
-            raise ValueError("choices cannot contain empty strings")
-
-        if any(len(item.split()) > 6 for item in cleaned):
-            raise ValueError("each choice must be at most 6 words long")
-
-        lowered = [item.lower() for item in cleaned]
-        if len(set(lowered)) != 3:
-            raise ValueError("choices must be distinct")
-
-        return cleaned
-#endregion
-
-
-#region EMBEDDINGS & VECTOR STORES
-ollama_embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
-
-vectorstore_char = Chroma(
-    client=chromadb.PersistentClient(path="db/chroma"),
-    collection_name=CHAR_COL,
-    embedding_function=ollama_embeddings
-)
-
-vectorstore_loc = Chroma(
-    client=chromadb.PersistentClient(path="db/chroma"),
-    collection_name=LOC_COL,
-    embedding_function=ollama_embeddings
-)
-#endregion
-
-
-#region TOOLS
-def combat_tool(enemy: str) -> dict:
-    return {"action": "combat", "enemy": enemy}
-
-def nothing_tool(_: str) -> dict:
-    return {"action": "continue"}
-
-def heal_tool(amount: int) -> dict:
-    return {"action": "continue"}
-
-tools = [
-    Tool(
-        name="combat",
-        func=combat_tool,
-        description="When the player is facing a monster, start combat against that monster ; arg monster name",
-        return_direct=True
-    ),
-    Tool(
-        name="nothing",
-        func=nothing_tool,
-        description="Return nothing, do nothing.",
-        return_direct=True
-    ),
-    Tool(
-        name="heal",
-        func=heal_tool,
-        description="When the player should regain health ; arg heal amount",
-        return_direct=True
-    )
-]
-#endregion
-
-
-#region LLM / AGENTS / CHAINS
-llm = ChatGroq(
-    api_key=GROQ_API_KEY,
-    model=GROQ_MODEL,
-    temperature=0.5,
-    model_kwargs={"seed": seed}
-)
-
-template = ChatPromptTemplate.from_template("{full_prompt}")
-story_chain = template | llm | StrOutputParser()
-
-summary_chain = SUMMARY_TEMPLATE | llm | StrOutputParser()
-
-choicer_model = llm.with_structured_output(ChoiceOutput)
-choicer_chain = CHOOSER_TEMPLATE | choicer_model
-#endregion
-
-
 #region RUNTIME INIT
 def initialize_graph_runtime(state: GameState) -> None:
     global instruction, thinker_agent
 
     instruction = build_thinker_instruction(state["adventure"].monsters)
 
-    thinker_agent = create_agent(llm, tools)
+    thinker_agent = build_thinker_agent()
 
 def prompt_fn(state: AgentState) -> list[SystemMessage | HumanMessage]:
     sys = SystemMessage(content=instruction)

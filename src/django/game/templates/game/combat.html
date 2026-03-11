@@ -1,3 +1,6 @@
+{% load static %}
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -255,9 +258,9 @@
         const API_COMBAT_STATE_URL = "{% url 'api_combat_state' %}";
         const API_COMBAT_START_URL = "{% url 'api_combat_start' %}";
         const API_COMBAT_ACTION_URL = "{% url 'api_combat_action' %}";
-        const API_COMBAT_IMAGE_URL = "{% url 'api_combat_image' %}";
         const API_STEP_URL = "{% url 'api_step' %}";
         const PLAY_URL = "{% url 'play' %}";
+        const MONSTER_STATIC_BASE = "{% static 'game/monsters/' %}";
 
         const combatTitle = document.getElementById("combat-title");
         const combatFluff = document.getElementById("combat-fluff");
@@ -353,10 +356,10 @@
             renderPlayer(data.player);
 
             if (data.monster_name) {
-                monsterImage.src = `${API_COMBAT_IMAGE_URL}?t=${Date.now()}`;
+                const filename = data.monster_name.replaceAll(" ", "_") + ".png";
+                monsterImage.src = `${MONSTER_STATIC_BASE}${filename}`;
                 monsterImage.style.display = "block";
-            } 
-            else {
+            } else {
                 monsterImage.style.display = "none";
             }
         }
@@ -519,7 +522,7 @@
                 returnPlayBtn.disabled = false;
             }
         });
-        
+
         loadCombatState().then(startCombatIfNeeded);
     </script>
 </body>
