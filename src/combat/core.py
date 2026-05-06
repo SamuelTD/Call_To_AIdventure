@@ -10,13 +10,22 @@ combat_log = []
 player = ""
 player_is_defending = False
 
+def restore_combat(param_player: Player, param_monster, param_combat_log=None):
+    global current_monster, combat_log, player, player_is_defending
+
+    player = param_player
+    current_monster = param_monster
+    combat_log = list(param_combat_log or [])
+    player_is_defending = False
+
 def setup_combat(enemy: str, param_player: Player):
     global current_monster, combat_log, player
     
     player = param_player
     current_monster = get_monster(enemy)
     if not current_monster:
-        return f"{enemy} not found in database."
+        combat_log = [f"{enemy} not found in database."]
+        return combat_log, None
     combat_log = []
     combat_log.append(f"You are facing {current_monster.name}!")
     return combat_log, current_monster

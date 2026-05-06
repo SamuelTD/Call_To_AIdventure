@@ -183,6 +183,9 @@ class StartCombatView(View):
 
         state = result["state"]
 
+        if result.get("mode") == "error":
+            return JsonResponse({"error": result.get("error", "Failed to start combat")}, status=400)
+
         request.session["game_state"] = make_serializable_state(state)
         request.session.modified = True
 
@@ -215,6 +218,9 @@ class CombatActionView(View):
         result = engine.combat_action(state, action)
 
         state = result["state"]
+
+        if result.get("mode") == "error":
+            return JsonResponse({"error": result.get("error", "Combat action failed")}, status=400)
 
         request.session["game_state"] = make_serializable_state(state)
         request.session.modified = True
