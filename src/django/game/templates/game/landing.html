@@ -113,7 +113,7 @@
             background: #5b3de0;
         }
 
-        button.hidden {
+        .hidden {
             display: none;
         }
 
@@ -137,6 +137,66 @@
         .error {
             color: #ff7b7b;
         }
+
+        .section-title {
+            margin: 24px 0 12px;
+            font-size: 1.25rem;
+        }
+
+        .saved-games {
+            display: grid;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .save-card {
+            background: #151515;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 14px;
+        }
+
+        .save-card h3 {
+            margin: 0 0 8px;
+            font-size: 1.05rem;
+        }
+
+        .save-meta, .save-preview {
+            color: #bbb;
+            font-size: 0.92rem;
+            line-height: 1.4;
+        }
+
+        .save-preview {
+            margin-top: 8px;
+        }
+
+        .save-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .save-actions button {
+            width: auto;
+            padding: 9px 12px;
+            font-size: 0.95rem;
+        }
+
+        .delete-save-btn {
+            background: #3a2525;
+            border: 1px solid #623535;
+        }
+
+        .delete-save-btn:hover {
+            background: #4a2b2b;
+        }
+
+        .empty-saves {
+            color: #bbb;
+            margin-bottom: 24px;
+        }
     </style>
 </head>
 <body>
@@ -159,6 +219,13 @@
                 </div>
             </div>
 
+            {% if user.is_authenticated %}
+                <h2 class="section-title">Continue Adventure</h2>
+                <div id="saved-games" class="saved-games"></div>
+                <div id="saved-games-empty" class="empty-saves hidden">No saved games yet.</div>
+            {% endif %}
+
+            <h2 class="section-title">Start New Adventure</h2>
             <label for="adventure-select">Choose an adventure</label>
             <select id="adventure-select">
                 <option value="">Loading adventures...</option>
@@ -177,13 +244,153 @@
     <script>
         const API_ADVENTURES_URL = "{% url 'api_adventures' %}";
         const API_START_URL = "{% url 'api_start' %}";
+        const IS_AUTHENTICATED = {{ user.is_authenticated|yesno:"true,false" }};
+        const API_SAVES_URL = "{% url 'api_saves' %}";
+        const API_SAVE_LOAD_TEMPLATE = "{% url 'api_save_load' 0 %}";
+        const API_SAVE_DELETE_TEMPLATE = "{% url 'api_save_delete' 0 %}";
 
         const adventureSelect = document.getElementById("adventure-select");
         const introBox = document.getElementById("intro-box");
         const startBtn = document.getElementById("start-btn");
         const statusBox = document.getElementById("status");
+        const savedGames = document.getElementById("saved-games");
+        const savedGamesEmpty = document.getElementById("saved-games-empty");
 
         let adventures = [];
+
+        function saveUrl(template, id) {
+            return template.replace("/0/", `/${id}/`);
+        }
+
+        function formatSaveDate(value) {
+            if (!value) return "";
+            return new Intl.DateTimeFormat(undefined, {
+                dateStyle: "medium",
+                timeStyle: "short"
+            }).format(new Date(value));
+        }
+
+        function renderSaves(saves) {
+            if (!savedGames || !savedGamesEmpty) return;
+
+            savedGames.innerHTML = "";
+
+            if (!saves || saves.length === 0) {
+                savedGamesEmpty.classList.remove("hidden");
+                return;
+            }
+
+            savedGamesEmpty.classList.add("hidden");
+
+            for (const save of saves) {
+                const card = document.createElement("article");
+                card.className = "save-card";
+
+                const title = document.createElement("h3");
+                title.textContent = save.adventure_name || "Adventure";
+
+                const meta = document.createElement("div");
+                meta.className = "save-meta";
+                const hp = save.player_hp == null ? "" : ` · HP ${save.player_hp}/${save.player_max_hp}`;
+                meta.textContent = `${save.player_name || "Adventurer"}${hp} · Updated ${formatSaveDate(save.updated_at)}`;
+
+                const preview = document.createElement("div");
+                preview.className = "save-preview";
+                preview.textContent = save.story_preview || "The adventure has just begun.";
+
+                const actions = document.createElement("div");
+                actions.className = "save-actions";
+
+                const continueBtn = document.createElement("button");
+                continueBtn.type = "button";
+                continueBtn.textContent = "Continue";
+                continueBtn.addEventListener("click", () => loadSave(save.id));
+
+                const deleteBtn = document.createElement("button");
+                deleteBtn.type = "button";
+                deleteBtn.className = "delete-save-btn";
+                deleteBtn.textContent = "Delete";
+                deleteBtn.addEventListener("click", () => deleteSave(save.id));
+
+                actions.appendChild(continueBtn);
+                actions.appendChild(deleteBtn);
+                card.appendChild(title);
+                card.appendChild(meta);
+                card.appendChild(preview);
+                card.appendChild(actions);
+                savedGames.appendChild(card);
+            }
+        }
+
+        async function loadSaves() {
+            if (!IS_AUTHENTICATED) return;
+
+            try {
+                const response = await fetch(API_SAVES_URL);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || "Failed to load saved games");
+                }
+
+                renderSaves(data.saves || []);
+            } catch (err) {
+                console.error(err);
+                statusBox.textContent = err.message;
+                statusBox.classList.add("error");
+            }
+        }
+
+        async function loadSave(id) {
+            statusBox.classList.remove("error");
+            statusBox.textContent = "Loading saved game...";
+
+            try {
+                const response = await fetch(saveUrl(API_SAVE_LOAD_TEMPLATE, id), {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || "Failed to load saved game");
+                }
+
+                window.location.href = data.redirect_url || "/play/";
+            } catch (err) {
+                console.error(err);
+                statusBox.textContent = err.message;
+                statusBox.classList.add("error");
+            }
+        }
+
+        async function deleteSave(id) {
+            statusBox.classList.remove("error");
+            statusBox.textContent = "Deleting saved game...";
+
+            try {
+                const response = await fetch(saveUrl(API_SAVE_DELETE_TEMPLATE, id), {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || "Failed to delete saved game");
+                }
+
+                statusBox.textContent = "";
+                await loadSaves();
+            } catch (err) {
+                console.error(err);
+                statusBox.textContent = err.message;
+                statusBox.classList.add("error");
+            }
+        }
 
         async function loadAdventures() {
             statusBox.textContent = "Loading adventures...";
@@ -260,6 +467,7 @@
         });
 
         loadAdventures();
+        loadSaves();
     </script>
 </body>
 </html>

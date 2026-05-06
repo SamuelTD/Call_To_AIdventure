@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
+from game.models import SaveGame
 from game.services.game_engine import GameEngine
 from agents.game_master_graph import (
     normalize_damage_amount,
@@ -13,6 +14,7 @@ from agents.game_master_graph import (
     step_get_input,
 )
 from agents.tools import deal_damage_tool, heal_tool, tools
+from utils.adventure import Adventure
 from utils.enums import CharacterClass, PlayerAction
 from utils.monster import Monster
 from utils.player import Player
@@ -43,6 +45,31 @@ def make_monster(hp=8):
         charisma=1,
         description="A test foe.",
     )
+
+
+def make_adventure():
+    return Adventure(
+        id="emerald_sword",
+        name="The Emerald Sword",
+        description="A test adventure.",
+        monsters=[],
+        npcs=[],
+        locations=[],
+    )
+
+
+def make_game_state():
+    adventure = make_adventure()
+    return {
+        "player": make_player(),
+        "adventure": adventure,
+        "history": ["An old road waits."],
+        "story_steps": 1,
+        "should_end": False,
+        "current_story": "An old road waits.",
+        "current_choices": ["Walk onward."],
+        "last_cmd": "continue",
+    }
 
 
 class CombatEngineTests(SimpleTestCase):
@@ -156,6 +183,96 @@ class AccountFlowTests(TestCase):
 
         self.assertRedirects(response, reverse("landing"))
         self.assertNotContains(response, "loaded_player")
+
+
+class SaveGamePersistenceTests(TestCase):
+    @patch("game.views.get_engine")
+    @patch("game.views.initialize_game")
+    def test_anonymous_start_keeps_state_in_session_without_db_save(
+        self,
+        initialize_game,
+        get_engine,
+    ):
+        state = make_game_state()
+        adventure = state["adventure"]
+        initialize_game.return_value = (state, "An old road waits.", adventure)
+        get_engine.return_value.initialize.return_value = state
+
+        response = self.client.post(
+            reverse("api_start"),
+            {"adventure_id": adventure.id},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(SaveGame.objects.count(), 0)
+        self.assertIn("game_state", self.client.session)
+        self.assertNotIn("save_game_id", self.client.session)
+
+    @patch("game.views.get_engine")
+    @patch("game.views.initialize_game")
+    def test_logged_in_user_can_start_same_adventure_multiple_times(
+        self,
+        initialize_game,
+        get_engine,
+    ):
+        user = User.objects.create_user(
+            username="multi_runner",
+            password="LongEnoughPassword42",
+        )
+        self.client.force_login(user)
+        adventure = make_adventure()
+        get_engine.return_value.initialize.side_effect = lambda state: state
+
+        for index in range(2):
+            state = make_game_state()
+            state["current_story"] = f"Run {index + 1} begins."
+            initialize_game.return_value = (state, state["current_story"], adventure)
+
+            response = self.client.post(
+                reverse("api_start"),
+                {"adventure_id": adventure.id},
+                content_type="application/json",
+            )
+
+            self.assertEqual(response.status_code, 200)
+
+        saves = SaveGame.objects.filter(user=user, adventure_id=adventure.id)
+        self.assertEqual(saves.count(), 2)
+        self.assertIn(self.client.session["save_game_id"], list(saves.values_list("id", flat=True)))
+
+    def test_load_save_requires_owner_and_restores_session(self):
+        owner = User.objects.create_user(
+            username="owner",
+            password="LongEnoughPassword42",
+        )
+        other = User.objects.create_user(
+            username="other",
+            password="LongEnoughPassword42",
+        )
+        state = make_game_state()
+        save = SaveGame.objects.create(
+            user=owner,
+            adventure_id=state["adventure"].id,
+            adventure_name=state["adventure"].name,
+            state={
+                "player": state["player"].to_dict(),
+                "adventure": state["adventure"].to_dict(),
+                "current_story": state["current_story"],
+                "current_choices": state["current_choices"],
+            },
+        )
+
+        self.client.force_login(other)
+        forbidden_response = self.client.post(reverse("api_save_load", args=[save.id]))
+        self.assertEqual(forbidden_response.status_code, 404)
+
+        self.client.force_login(owner)
+        response = self.client.post(reverse("api_save_load", args=[save.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.client.session["save_game_id"], save.id)
+        self.assertEqual(self.client.session["game_state"]["current_story"], state["current_story"])
 
 
 class HealingToolTests(SimpleTestCase):

@@ -9,7 +9,8 @@ from django.contrib.auth.forms import UserCreationForm
 from utils.adventure import load_all_adventures
 from utils.player import Player
 
-from game.services.tools import initialize_game, rebuild_state, make_serializable_state
+from game.models import SaveGame
+from game.services.tools import initialize_game, persist_game, rebuild_state
 from game.services.game_engine import get_engine
 
 from uuid import uuid4
@@ -46,6 +47,25 @@ def build_combat_state_payload(state):
         "monster_hp": monster.HP if monster else None,
         "monster_max_hp": monster.max_HP if monster else None,
         "player": build_character_sheet(player),
+    }
+
+def build_save_game_payload(save_game):
+    state = save_game.state or {}
+    player = state.get("player") or {}
+    story = state.get("current_story") or ""
+    choices = state.get("current_choices") or []
+
+    return {
+        "id": save_game.id,
+        "adventure_id": save_game.adventure_id,
+        "adventure_name": save_game.adventure_name,
+        "player_name": player.get("name", "Adventurer"),
+        "player_hp": player.get("hp"),
+        "player_max_hp": player.get("max_hp"),
+        "story_preview": story[:180],
+        "choice_count": len(choices),
+        "updated_at": save_game.updated_at.isoformat(),
+        "created_at": save_game.created_at.isoformat(),
     }
 
 # region VIEWS
@@ -88,23 +108,23 @@ class StartGameView(View):
         if not adventure_id:
             return JsonResponse({"error": "Missing adventure_id"}, status=400)
 
-        user = request.user if request.user.is_authenticated else None
-
-        state, serializable_state, intro, adventure = initialize_game(user, adventure_id)
+        try:
+            state, intro, adventure = initialize_game(adventure_id)
+        except StopIteration:
+            return JsonResponse({"error": "Unknown adventure_id"}, status=404)
 
         # run the engine initialization (this runs pre_graph)
         engine = get_engine()
         state = engine.initialize(state)
 
-        # store in session
         session_id = str(uuid4())
 
-        request.session["game_state"] = make_serializable_state(state)
         request.session["session_id"] = session_id
-        request.session.modified = True
+        serializable_state, save_game = persist_game(request, state, create_new=True)
 
         return JsonResponse({
             "session_id": session_id,
+            "save_game_id": save_game.id if save_game else None,
             "adventure_name": adventure.name,
             "story": state["current_story"],
             "choices": state["current_choices"],
@@ -141,8 +161,7 @@ class StepGameView(View):
         state = result["state"]
 
         # Save updated state
-        request.session["game_state"] = make_serializable_state(state)
-        request.session.modified = True
+        persist_game(request, state)
 
         player_sheet = build_character_sheet(state["player"])
 
@@ -155,7 +174,6 @@ class StepGameView(View):
         # Return response depending on mode
         # COMBAT BRANCH
         if result["mode"] == "combat":
-            request.session["game_state"] = make_serializable_state(state)
             request.session["combat_fluff"] = result["combat_fluff"]
             request.session.modified = True
             
@@ -167,6 +185,7 @@ class StepGameView(View):
 
         # STORY BRANCH
         request.session["combat_fluff"] = ""        
+        request.session.modified = True
         return JsonResponse({
             "mode": "story",
             "story": result["story"],
@@ -194,8 +213,7 @@ class StartCombatView(View):
         if result.get("mode") == "error":
             return JsonResponse({"error": result.get("error", "Failed to start combat")}, status=400)
 
-        request.session["game_state"] = make_serializable_state(state)
-        request.session.modified = True
+        persist_game(request, state)
 
         response_payload = {k: v for k, v in result.items() if k != "state"}
         return JsonResponse(response_payload)
@@ -230,8 +248,7 @@ class CombatActionView(View):
         if result.get("mode") == "error":
             return JsonResponse({"error": result.get("error", "Combat action failed")}, status=400)
 
-        request.session["game_state"] = make_serializable_state(state)
-        request.session.modified = True
+        persist_game(request, state)
         
         response_payload = {k: v for k, v in result.items() if k != "state"}
         response_payload["player"] = build_character_sheet(state["player"])
@@ -302,6 +319,57 @@ class AdventureListView(View):
         ]
 
         return JsonResponse({"adventures": data})
+
+class SaveGameListView(View):
+    def get(self, request):
+        if not request.user.is_authenticated:
+            return JsonResponse({"saves": []})
+
+        saves = SaveGame.objects.filter(user=request.user).order_by("-updated_at")
+        return JsonResponse({"saves": [build_save_game_payload(save) for save in saves]})
+
+@method_decorator(csrf_exempt, name="dispatch")
+class LoadSaveGameView(View):
+    def post(self, request, save_game_id):
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Login required"}, status=401)
+
+        save_game = SaveGame.objects.filter(id=save_game_id, user=request.user).first()
+        if save_game is None:
+            raise Http404("Save game not found")
+
+        request.session["game_state"] = save_game.state
+        request.session["save_game_id"] = save_game.id
+        request.session["session_id"] = str(uuid4())
+        request.session["combat_fluff"] = ""
+        request.session.modified = True
+
+        state = save_game.state or {}
+        redirect_url = "/combat/" if state.get("current_monster_name") else "/play/"
+
+        return JsonResponse({
+            "save_game": build_save_game_payload(save_game),
+            "redirect_url": redirect_url,
+        })
+
+@method_decorator(csrf_exempt, name="dispatch")
+class DeleteSaveGameView(View):
+    def post(self, request, save_game_id):
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Login required"}, status=401)
+
+        deleted_count, _ = SaveGame.objects.filter(id=save_game_id, user=request.user).delete()
+
+        if not deleted_count:
+            raise Http404("Save game not found")
+
+        if request.session.get("save_game_id") == save_game_id:
+            request.session.pop("save_game_id", None)
+            request.session.pop("game_state", None)
+            request.session.pop("combat_fluff", None)
+            request.session.modified = True
+
+        return JsonResponse({"ok": True})
     
 class PlayPageView(TemplateView):
     template_name = "game/play.html"
