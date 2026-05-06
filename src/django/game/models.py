@@ -6,6 +6,8 @@ class SaveGame(models.Model):
     adventure_id = models.CharField(max_length=100)
     adventure_name = models.CharField(max_length=200)
     state = models.JSONField(default=dict)  # serialized GameState
+    is_finished = models.BooleanField(default=False, db_index=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

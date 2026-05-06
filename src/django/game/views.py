@@ -64,6 +64,8 @@ def build_save_game_payload(save_game):
         "player_max_hp": player.get("max_hp"),
         "story_preview": story[:180],
         "choice_count": len(choices),
+        "is_finished": save_game.is_finished,
+        "finished_at": save_game.finished_at.isoformat() if save_game.finished_at else None,
         "updated_at": save_game.updated_at.isoformat(),
         "created_at": save_game.created_at.isoformat(),
     }
@@ -160,16 +162,17 @@ class StepGameView(View):
 
         state = result["state"]
 
-        # Save updated state
-        persist_game(request, state)
-
         player_sheet = build_character_sheet(state["player"])
 
         if result["mode"] == "gameover":
+            persist_game(request, state, finish=True)
             return JsonResponse({
                 "mode": "gameover",
                 "player": player_sheet,
             })
+
+        # Save updated state
+        persist_game(request, state)
         
         # Return response depending on mode
         # COMBAT BRANCH
@@ -248,7 +251,7 @@ class CombatActionView(View):
         if result.get("mode") == "error":
             return JsonResponse({"error": result.get("error", "Combat action failed")}, status=400)
 
-        persist_game(request, state)
+        persist_game(request, state, finish=result.get("mode") == "defeat")
         
         response_payload = {k: v for k, v in result.items() if k != "state"}
         response_payload["player"] = build_character_sheet(state["player"])
@@ -326,7 +329,13 @@ class SaveGameListView(View):
             return JsonResponse({"saves": []})
 
         saves = SaveGame.objects.filter(user=request.user).order_by("-updated_at")
-        return JsonResponse({"saves": [build_save_game_payload(save) for save in saves]})
+        active_saves = [save for save in saves if not save.is_finished]
+        history_saves = [save for save in saves if save.is_finished]
+
+        return JsonResponse({
+            "saves": [build_save_game_payload(save) for save in active_saves],
+            "history": [build_save_game_payload(save) for save in history_saves],
+        })
 
 @method_decorator(csrf_exempt, name="dispatch")
 class LoadSaveGameView(View):
@@ -337,6 +346,9 @@ class LoadSaveGameView(View):
         save_game = SaveGame.objects.filter(id=save_game_id, user=request.user).first()
         if save_game is None:
             raise Http404("Save game not found")
+
+        if save_game.is_finished:
+            return JsonResponse({"error": "Finished games are in history and cannot be loaded"}, status=400)
 
         request.session["game_state"] = save_game.state
         request.session["save_game_id"] = save_game.id

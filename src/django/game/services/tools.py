@@ -1,4 +1,5 @@
 from game.models import SaveGame
+from django.utils import timezone
 from utils.player import Player, load_player
 from utils.adventure import Adventure, load_all_adventures, load_adv_intro
 from utils.monster import Monster
@@ -32,7 +33,14 @@ def rebuild_state(serialized_state: dict) -> dict:
 
     return state
 
-def persist_game(request, state: dict, *, save_game=None, create_new=False) -> tuple[dict, SaveGame | None]:
+def persist_game(
+    request,
+    state: dict,
+    *,
+    save_game=None,
+    create_new=False,
+    finish=False,
+) -> tuple[dict, SaveGame | None]:
     serializable_state = make_serializable_state(state)
 
     request.session["game_state"] = serializable_state
@@ -61,6 +69,12 @@ def persist_game(request, state: dict, *, save_game=None, create_new=False) -> t
     if adventure:
         save.adventure_id = adventure.id
         save.adventure_name = adventure.name
+    if create_new:
+        save.is_finished = False
+        save.finished_at = None
+    if finish and not save.is_finished:
+        save.is_finished = True
+        save.finished_at = timezone.now()
     save.save()
 
     request.session["save_game_id"] = save.id

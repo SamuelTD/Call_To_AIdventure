@@ -143,6 +143,25 @@
             font-size: 1.25rem;
         }
 
+        .save-tabs {
+            display: flex;
+            gap: 8px;
+            margin: 24px 0 12px;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            width: auto;
+            padding: 9px 12px;
+            background: #252525;
+            border: 1px solid #444;
+        }
+
+        .tab-btn.active {
+            background: #6d4aff;
+            border-color: #6d4aff;
+        }
+
         .saved-games {
             display: grid;
             gap: 12px;
@@ -193,6 +212,10 @@
             background: #4a2b2b;
         }
 
+        .finished-save {
+            border-color: #4a3f2f;
+        }
+
         .empty-saves {
             color: #bbb;
             margin-bottom: 24px;
@@ -220,24 +243,49 @@
             </div>
 
             {% if user.is_authenticated %}
-                <h2 class="section-title">Continue Adventure</h2>
-                <div id="saved-games" class="saved-games"></div>
-                <div id="saved-games-empty" class="empty-saves hidden">No saved games yet.</div>
+                <div class="save-tabs" role="tablist" aria-label="Saved games">
+                    <button id="new-adventure-tab" class="tab-btn active" type="button">New Adventure</button>
+                    <button id="active-saves-tab" class="tab-btn" type="button">Continue Adventure</button>
+                    <button id="history-saves-tab" class="tab-btn" type="button">History</button>
+                </div>
+
+                <div id="active-saves-panel" class="hidden">
+                    <div id="saved-games" class="saved-games"></div>
+                    <div id="saved-games-empty" class="empty-saves hidden">No saved games yet.</div>
+                </div>
+
+                <div id="new-adventure-panel">
+                    <label for="adventure-select">Choose an adventure</label>
+                    <select id="adventure-select">
+                        <option value="">Loading adventures...</option>
+                    </select>
+
+                    <div id="intro-box" class="intro-box">
+                        Select an adventure to see its introduction.
+                    </div>
+
+                    <button id="start-btn" class="hidden">Start Adventure</button>
+                </div>
+
+                <div id="history-saves-panel" class="hidden">
+                    <div id="history-games" class="saved-games"></div>
+                    <div id="history-games-empty" class="empty-saves hidden">No finished adventures yet.</div>
+                </div>
+            {% else %}
+                <h2 class="section-title">Start New Adventure</h2>
+                <label for="adventure-select">Choose an adventure</label>
+                <select id="adventure-select">
+                    <option value="">Loading adventures...</option>
+                </select>
+
+                <div id="intro-box" class="intro-box">
+                    Select an adventure to see its introduction.
+                </div>
+
+                <button id="start-btn" class="hidden">Start Adventure</button>
             {% endif %}
 
-            <h2 class="section-title">Start New Adventure</h2>
-            <label for="adventure-select">Choose an adventure</label>
-            <select id="adventure-select">
-                <option value="">Loading adventures...</option>
-            </select>
-
-            <div id="intro-box" class="intro-box">
-                Select an adventure to see its introduction.
-            </div>
-
             <div id="status" class="status"></div>
-
-            <button id="start-btn" class="hidden">Start Adventure</button>
         </div>
     </div>
 
@@ -255,6 +303,14 @@
         const statusBox = document.getElementById("status");
         const savedGames = document.getElementById("saved-games");
         const savedGamesEmpty = document.getElementById("saved-games-empty");
+        const historyGames = document.getElementById("history-games");
+        const historyGamesEmpty = document.getElementById("history-games-empty");
+        const activeSavesTab = document.getElementById("active-saves-tab");
+        const newAdventureTab = document.getElementById("new-adventure-tab");
+        const historySavesTab = document.getElementById("history-saves-tab");
+        const activeSavesPanel = document.getElementById("active-saves-panel");
+        const newAdventurePanel = document.getElementById("new-adventure-panel");
+        const historySavesPanel = document.getElementById("history-saves-panel");
 
         let adventures = [];
 
@@ -270,21 +326,37 @@
             }).format(new Date(value));
         }
 
-        function renderSaves(saves) {
-            if (!savedGames || !savedGamesEmpty) return;
+        function showSaveTab(tabName) {
+            if (!activeSavesTab || !newAdventureTab || !historySavesTab || !activeSavesPanel || !newAdventurePanel || !historySavesPanel) return;
 
-            savedGames.innerHTML = "";
+            const showNewAdventure = tabName === "new";
+            const showHistory = tabName === "history";
+            activeSavesTab.classList.toggle("active", !showNewAdventure && !showHistory);
+            newAdventureTab.classList.toggle("active", showNewAdventure);
+            historySavesTab.classList.toggle("active", showHistory);
+            activeSavesPanel.classList.toggle("hidden", showNewAdventure || showHistory);
+            newAdventurePanel.classList.toggle("hidden", !showNewAdventure);
+            historySavesPanel.classList.toggle("hidden", !showHistory);
+        }
+
+        function renderSaveList(saves, container, emptyEl, allowContinue) {
+            if (!container || !emptyEl) return;
+
+            container.innerHTML = "";
 
             if (!saves || saves.length === 0) {
-                savedGamesEmpty.classList.remove("hidden");
+                emptyEl.classList.remove("hidden");
                 return;
             }
 
-            savedGamesEmpty.classList.add("hidden");
+            emptyEl.classList.add("hidden");
 
             for (const save of saves) {
                 const card = document.createElement("article");
                 card.className = "save-card";
+                if (save.is_finished) {
+                    card.classList.add("finished-save");
+                }
 
                 const title = document.createElement("h3");
                 title.textContent = save.adventure_name || "Adventure";
@@ -292,7 +364,9 @@
                 const meta = document.createElement("div");
                 meta.className = "save-meta";
                 const hp = save.player_hp == null ? "" : ` · HP ${save.player_hp}/${save.player_max_hp}`;
-                meta.textContent = `${save.player_name || "Adventurer"}${hp} · Updated ${formatSaveDate(save.updated_at)}`;
+                const dateLabel = save.is_finished ? "Finished" : "Updated";
+                const dateValue = save.is_finished ? save.finished_at : save.updated_at;
+                meta.textContent = `${save.player_name || "Adventurer"}${hp} · ${dateLabel} ${formatSaveDate(dateValue)}`;
 
                 const preview = document.createElement("div");
                 preview.className = "save-preview";
@@ -301,10 +375,13 @@
                 const actions = document.createElement("div");
                 actions.className = "save-actions";
 
-                const continueBtn = document.createElement("button");
-                continueBtn.type = "button";
-                continueBtn.textContent = "Continue";
-                continueBtn.addEventListener("click", () => loadSave(save.id));
+                if (allowContinue) {
+                    const continueBtn = document.createElement("button");
+                    continueBtn.type = "button";
+                    continueBtn.textContent = "Continue";
+                    continueBtn.addEventListener("click", () => loadSave(save.id));
+                    actions.appendChild(continueBtn);
+                }
 
                 const deleteBtn = document.createElement("button");
                 deleteBtn.type = "button";
@@ -312,14 +389,18 @@
                 deleteBtn.textContent = "Delete";
                 deleteBtn.addEventListener("click", () => deleteSave(save.id));
 
-                actions.appendChild(continueBtn);
                 actions.appendChild(deleteBtn);
                 card.appendChild(title);
                 card.appendChild(meta);
                 card.appendChild(preview);
                 card.appendChild(actions);
-                savedGames.appendChild(card);
+                container.appendChild(card);
             }
+        }
+
+        function renderSaves(activeSaves, historySaves) {
+            renderSaveList(activeSaves, savedGames, savedGamesEmpty, true);
+            renderSaveList(historySaves, historyGames, historyGamesEmpty, false);
         }
 
         async function loadSaves() {
@@ -333,7 +414,7 @@
                     throw new Error(data.error || "Failed to load saved games");
                 }
 
-                renderSaves(data.saves || []);
+                renderSaves(data.saves || [], data.history || []);
             } catch (err) {
                 console.error(err);
                 statusBox.textContent = err.message;
@@ -465,6 +546,12 @@
                 startBtn.disabled = false;
             }
         });
+
+        if (activeSavesTab && newAdventureTab && historySavesTab) {
+            activeSavesTab.addEventListener("click", () => showSaveTab("active"));
+            newAdventureTab.addEventListener("click", () => showSaveTab("new"));
+            historySavesTab.addEventListener("click", () => showSaveTab("history"));
+        }
 
         loadAdventures();
         loadSaves();

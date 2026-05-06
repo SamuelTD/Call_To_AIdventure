@@ -2,10 +2,12 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
 from django.urls import reverse
 
 from game.models import SaveGame
 from game.services.game_engine import GameEngine
+from game.services.tools import make_serializable_state
 from agents.game_master_graph import (
     normalize_damage_amount,
     normalize_heal_amount,
@@ -273,6 +275,131 @@ class SaveGamePersistenceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.client.session["save_game_id"], save.id)
         self.assertEqual(self.client.session["game_state"]["current_story"], state["current_story"])
+
+    def test_save_list_splits_active_saves_and_history(self):
+        user = User.objects.create_user(
+            username="historian",
+            password="LongEnoughPassword42",
+        )
+        self.client.force_login(user)
+        state = make_game_state()
+        active_save = SaveGame.objects.create(
+            user=user,
+            adventure_id=state["adventure"].id,
+            adventure_name="Active Run",
+            state=make_serializable_state(state),
+        )
+        finished_save = SaveGame.objects.create(
+            user=user,
+            adventure_id=state["adventure"].id,
+            adventure_name="Finished Run",
+            state=make_serializable_state(state),
+            is_finished=True,
+            finished_at=timezone.now(),
+        )
+
+        response = self.client.get(reverse("api_saves"))
+        payload = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([save["id"] for save in payload["saves"]], [active_save.id])
+        self.assertEqual([save["id"] for save in payload["history"]], [finished_save.id])
+        self.assertTrue(payload["history"][0]["is_finished"])
+
+    def test_finished_save_cannot_be_loaded(self):
+        user = User.objects.create_user(
+            username="done_runner",
+            password="LongEnoughPassword42",
+        )
+        self.client.force_login(user)
+        state = make_game_state()
+        save = SaveGame.objects.create(
+            user=user,
+            adventure_id=state["adventure"].id,
+            adventure_name=state["adventure"].name,
+            state=make_serializable_state(state),
+            is_finished=True,
+            finished_at=timezone.now(),
+        )
+
+        response = self.client.post(reverse("api_save_load", args=[save.id]))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "Finished games are in history and cannot be loaded")
+
+    @patch("game.views.get_engine")
+    def test_gameover_marks_current_save_as_finished(self, get_engine):
+        user = User.objects.create_user(
+            username="fallen_runner",
+            password="LongEnoughPassword42",
+        )
+        self.client.force_login(user)
+        state = make_game_state()
+        save = SaveGame.objects.create(
+            user=user,
+            adventure_id=state["adventure"].id,
+            adventure_name=state["adventure"].name,
+            state=make_serializable_state(state),
+        )
+        session = self.client.session
+        session["game_state"] = make_serializable_state(state)
+        session["save_game_id"] = save.id
+        session.save()
+        state["player"].hp = 0
+        state["should_end"] = True
+        get_engine.return_value.step.return_value = {
+            "state": state,
+            "mode": "gameover",
+        }
+
+        response = self.client.post(
+            reverse("api_step"),
+            {"choice": "Continue."},
+            content_type="application/json",
+        )
+
+        save.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(save.is_finished)
+        self.assertIsNotNone(save.finished_at)
+
+    @patch("game.views.get_engine")
+    def test_combat_defeat_marks_current_save_as_finished(self, get_engine):
+        user = User.objects.create_user(
+            username="defeated_runner",
+            password="LongEnoughPassword42",
+        )
+        self.client.force_login(user)
+        state = make_game_state()
+        state["current_monster_name"] = "Kobold Warrior"
+        state["current_monster"] = make_monster()
+        save = SaveGame.objects.create(
+            user=user,
+            adventure_id=state["adventure"].id,
+            adventure_name=state["adventure"].name,
+            state=make_serializable_state(state),
+        )
+        session = self.client.session
+        session["game_state"] = make_serializable_state(state)
+        session["save_game_id"] = save.id
+        session.save()
+        state["player"].hp = 0
+        get_engine.return_value.combat_action.return_value = {
+            "state": state,
+            "mode": "defeat",
+            "combat_log": "The final blow lands.",
+        }
+
+        response = self.client.post(
+            reverse("api_combat_action"),
+            {"action": PlayerAction.ATTACK.value},
+            content_type="application/json",
+        )
+
+        save.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(save.is_finished)
+        self.assertIsNotNone(save.finished_at)
 
 
 class HealingToolTests(SimpleTestCase):
