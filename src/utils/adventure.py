@@ -15,6 +15,7 @@ class Adventure(SerializableModel):
     id: str = Field(..., description="Unique identifier for the adventure module")
     name: str = Field(..., description="Title of the adventure module")
     description: Optional[str] = Field(None, description="Brief summary or blurb")
+    goals: List[str] = Field(..., description="The list of objectives the player needs to accomplish for the Adventure to be considred won.")
     monsters: List[str] = Field(..., description="List of monster names referenced by this module")
     npcs: List[str] = Field(..., description="List of NPC names referenced by this module")
     locations: List[str] = Field(..., description="List of location names referenced by this module")
@@ -31,12 +32,13 @@ def save_adventure(title: str) -> None:
    
     conn.execute(
         '''INSERT OR REPLACE INTO adventures
-           (id, name, description, monsters, npcs, locations, items, tags)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+           (id, name, description, goals, monsters, npcs, locations, items, tags)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
         (
             data['id'],
             data['name'],
             data.get('description'),
+            json.dumps(data['goals']),
             json.dumps(data['monsters']),
             json.dumps(data['npcs']),
             json.dumps(data['locations']),
@@ -52,7 +54,7 @@ def load_adventure(adv_id: str) -> Adventure:
     conn = sqlite3.connect(file_path)    
     
     cur = conn.execute(
-        'SELECT id, name, description, monsters, npcs, locations, items, tags FROM adventures WHERE id = ?',
+        'SELECT id, name, description, goals, monsters, npcs, locations, items, tags FROM adventures WHERE id = ?',
         (adv_id,)
     )
     row = cur.fetchone()
@@ -60,11 +62,12 @@ def load_adventure(adv_id: str) -> Adventure:
     if not row:
         raise KeyError(f"Adventure with id '{adv_id}' not found")
 
-    id_, name, desc, monsters, npcs, locations, items, tags = row
+    id_, name, desc, goals, monsters, npcs, locations, items, tags = row
     payload = {
         'id': id_,
         'name': name,
         'description': desc,
+        'goals': goals,
         'monsters': json.loads(monsters),
         'npcs': json.loads(npcs),
         'locations': json.loads(locations),
@@ -80,13 +83,19 @@ def load_adv_intro(id: str) -> str:
         
     return intro
 
+def load_adv_outro(id: str) -> str:
+    with open(ROOT_DIR / f"data/world/adventures/{id}/outro.txt", "r") as f:
+        outro = f.read()
+        
+    return outro
+
 def load_all_adventures() -> List[Adventure]:
     """
     Fetch all adventures from the database and return them as a list of Adventure instances.
     """
     conn = sqlite3.connect(file_path)
     cur = conn.execute(
-        'SELECT id, name, description, monsters, npcs, locations, items, tags '
+        'SELECT id, name, description, goals, monsters, npcs, locations, items, tags '
         'FROM adventures'
     )
     rows = cur.fetchall()
@@ -94,11 +103,12 @@ def load_all_adventures() -> List[Adventure]:
 
     adventures: List[Adventure] = []
     for row in rows:
-        id_, name, desc, monsters, npcs, locations, items, tags = row
+        id_, name, desc, goals, monsters, npcs, locations, items, tags = row
         payload = {
             'id': id_,
             'name': name,
             'description': desc,
+            'goals': json.loads(goals),
             'monsters': json.loads(monsters),
             'npcs': json.loads(npcs),
             'locations': json.loads(locations),

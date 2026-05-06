@@ -57,6 +57,7 @@ def create_schema(conn: sqlite3.Connection) -> None:
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     description TEXT,
+    goals TEXT NOT NULL,
     monsters TEXT NOT NULL,
     npcs TEXT NOT NULL,
     locations TEXT NOT NULL,

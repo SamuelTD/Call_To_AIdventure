@@ -2,6 +2,7 @@
   "id": "test_adv",
   "name": "Testing Adventure",
   "description": "This is a test-purpose adventure not meant to be acually played.",
+  "goals": ["Open the door."],
   "monsters": [
     "Zombie",
     "Kobold Warrior",
