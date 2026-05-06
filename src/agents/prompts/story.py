@@ -35,6 +35,34 @@ Incorporate those into your narrative.
 """.strip()
 
 
+def build_post_heal_story_prompt(
+    player_summary: str,
+    chat_history: str,
+    latest_user: str,
+    requested_heal_amount: int,
+    actual_heal_amount: int,
+    current_hp: int,
+    max_hp: int,
+) -> str:
+    return f"""
+Here are the informations on the user :
+{player_summary}
+
+Here is the adventure so far:
+{chat_history}
+
+You are the Game Master for a narrative adventure game. You continue the story
+based on the events so far and the user input. You use a refined, fantasy inspired tone to craft the story.
+You write in the second person.
+Limit each of your answers to four sentences maximum.
+The user's latest action resulted in healing.
+The player recovered {actual_heal_amount} HP.
+Incorporate the health gain naturally into your narrative. Do not invent extra treasure, combat, or additional mechanical rewards.
+
+User input: {latest_user}
+""".strip()
+
+
 def build_regular_story_prompt(
     player_summary: str,
     chat_history: str,

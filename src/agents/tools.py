@@ -10,7 +10,7 @@ def nothing_tool(_: str) -> dict:
 
 
 def heal_tool(amount: int) -> dict:
-    return {"action": "continue"}
+    return {"action": "heal", "amount": amount}
 
 
 tools = [

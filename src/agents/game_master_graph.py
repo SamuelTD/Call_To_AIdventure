@@ -27,6 +27,7 @@ from agents.prompts import (
     build_thinker_system_message,
     build_pre_combat_fluff_prompt,
     build_post_combat_story_prompt,
+    build_post_heal_story_prompt,
     build_regular_story_prompt,
 )
 
@@ -69,6 +70,8 @@ class GameState(TypedDict, total=False):
     gold_loot: int
     item_loot: list[str]
     after_combat: bool
+    heal_amount: int
+    actual_heal_amount: int
 #endregion
 
 #region RUNTIME INIT
@@ -133,6 +136,12 @@ def load_adv(id: str, print_text: bool = False):
 def load_adv_intro(id: str) -> str:
     with open(f"data/world/adventures/{id}/intro.txt", "r") as f:
         return f.read()
+
+def normalize_heal_amount(amount) -> int:
+    try:
+        return max(0, int(amount or 0))
+    except (TypeError, ValueError):
+        return 0
 #endregion
 
 
@@ -188,7 +197,8 @@ def step_agent_think(state: GameState) -> GameState:
     action = tool_msg.get("action")
     return {
         "last_cmd": "continue" if (action == "nothing" or action is None) else action,
-        "current_monster_name": tool_msg.get("enemy", None)
+        "current_monster_name": tool_msg.get("enemy", None),
+        "heal_amount": tool_msg.get("amount", 0),
     }
 
 def step_prepare_combat(state: GameState) -> GameState:
@@ -225,6 +235,29 @@ def step_generate_story(state: GameState) -> GameState:
         state["gold_loot"] = 0
         state["item_loot"] = []
 
+    elif cmd == "heal":
+        requested_heal_amount = normalize_heal_amount(state.get("heal_amount", 0))
+        previous_hp = state["player"].hp
+        state["player"].hp = min(
+            state["player"].max_hp,
+            previous_hp + requested_heal_amount,
+        )
+        actual_heal_amount = state["player"].hp - previous_hp
+
+        prompt = build_post_heal_story_prompt(
+            player_summary=player_summary,
+            chat_history=chat_hist,
+            latest_user=q,
+            requested_heal_amount=requested_heal_amount,
+            actual_heal_amount=actual_heal_amount,
+            current_hp=state["player"].hp,
+            max_hp=state["player"].max_hp,
+        )
+
+        state["last_cmd"] = "continue"
+        state["heal_amount"] = 0
+        state["actual_heal_amount"] = actual_heal_amount
+
     else:
         prompt = build_regular_story_prompt(
             player_summary=player_summary,
@@ -260,13 +293,22 @@ def build_post_input_graph(builder: StateGraph):
     builder.add_conditional_edges(
         START,
         lambda s: s.get("last_cmd"),
-        {"combat": "generate_story", "continue": "agent_think"}
+        {
+            "combat": "generate_story",
+            "heal": "generate_story",
+            "continue": "agent_think",
+        }
     )
 
     builder.add_conditional_edges(
         "agent_think",
         lambda s: s.get("last_cmd"),
-        {"combat": "prepare_combat", "continue": "generate_story", "end": END}
+        {
+            "combat": "prepare_combat",
+            "heal": "generate_story",
+            "continue": "generate_story",
+            "end": END,
+        }
     )
 
     builder.add_edge("prepare_combat", END)
