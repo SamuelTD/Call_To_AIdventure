@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Create Account - Call To AIdventure</title>
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: #eee;
+        }
+
+        .auth-panel {
+            width: min(460px, calc(100vw - 32px));
+            background: #1c1c1c;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 24px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+        }
+
+        h1 {
+            margin: 0 0 20px;
+            font-size: 1.8rem;
+        }
+
+        label {
+            display: block;
+            margin: 14px 0 8px;
+            font-weight: bold;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            background: #222;
+            color: #eee;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+        .helptext {
+            display: block;
+            margin-top: 6px;
+            color: #bbb;
+            font-size: 0.9rem;
+            line-height: 1.35;
+        }
+
+        .helptext ul {
+            margin: 6px 0 0 18px;
+            padding: 0;
+        }
+
+        button, .secondary-link {
+            display: block;
+            width: 100%;
+            margin-top: 18px;
+            padding: 12px;
+            border-radius: 8px;
+            border: 0;
+            box-sizing: border-box;
+            text-align: center;
+            font-size: 1rem;
+            font-weight: bold;
+            text-decoration: none;
+        }
+
+        button {
+            background: #6d4aff;
+            color: white;
+            cursor: pointer;
+        }
+
+        .secondary-link {
+            background: #262626;
+            color: #eee;
+            border: 1px solid #3a3a3a;
+        }
+
+        .errorlist {
+            color: #ff8b8b;
+        }
+    </style>
+</head>
+<body>
+    <main class="auth-panel">
+        <h1>Create Account</h1>
+
+        <form method="post">
+            {% csrf_token %}
+            {% for field in form %}
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {{ field.errors }}
+                {% if field.help_text %}
+                    <span class="helptext">{{ field.help_text|safe }}</span>
+                {% endif %}
+            {% endfor %}
+
+            <button type="submit">Create Account</button>
+        </form>
+
+        <a class="secondary-link" href="{% url 'login' %}">Log In Instead</a>
+        <a class="secondary-link" href="{% url 'landing' %}">Back to Adventures</a>
+    </main>
+</body>
+</html>

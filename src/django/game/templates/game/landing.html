@@ -30,6 +30,56 @@
             font-size: 2rem;
         }
 
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+
+        .account-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            color: #bbb;
+            font-size: 0.95rem;
+        }
+
+        .account-link, .logout-button {
+            width: auto;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            background: #252525;
+            color: #eee;
+            font-size: 0.95rem;
+            font-weight: bold;
+            text-decoration: none;
+            line-height: 1.2;
+        }
+
+        .logout-form {
+            margin: 0;
+        }
+
+        .logout-button {
+            cursor: pointer;
+        }
+
+        @media (max-width: 640px) {
+            .top-bar {
+                display: block;
+            }
+
+            .account-actions {
+                justify-content: flex-start;
+                margin-top: 12px;
+            }
+        }
+
         label {
             display: block;
             margin-bottom: 8px;
@@ -92,7 +142,22 @@
 <body>
     <div class="page">
         <div class="panel">
-            <h1>🎲 Call To AIdventure</h1>
+            <div class="top-bar">
+                <h1>🎲 Call To AIdventure</h1>
+
+                <div class="account-actions">
+                    {% if user.is_authenticated %}
+                        <span>{{ user.username }}</span>
+                        <form class="logout-form" method="post" action="{% url 'logout' %}">
+                            {% csrf_token %}
+                            <button class="logout-button" type="submit">Log Out</button>
+                        </form>
+                    {% else %}
+                        <a class="account-link" href="{% url 'login' %}">Log In</a>
+                        <a class="account-link" href="{% url 'signup' %}">Create Account</a>
+                    {% endif %}
+                </div>
+            </div>
 
             <label for="adventure-select">Choose an adventure</label>
             <select id="adventure-select">

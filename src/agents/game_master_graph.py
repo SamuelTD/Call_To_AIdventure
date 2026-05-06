@@ -28,6 +28,7 @@ from agents.prompts import (
     build_pre_combat_fluff_prompt,
     build_post_combat_story_prompt,
     build_post_heal_story_prompt,
+    build_post_damage_story_prompt,
     build_regular_story_prompt,
 )
 
@@ -72,6 +73,8 @@ class GameState(TypedDict, total=False):
     after_combat: bool
     heal_amount: int
     actual_heal_amount: int
+    damage_amount: int
+    actual_damage_amount: int
 #endregion
 
 #region RUNTIME INIT
@@ -142,11 +145,22 @@ def normalize_heal_amount(amount) -> int:
         return max(0, int(amount or 0))
     except (TypeError, ValueError):
         return 0
+
+def normalize_damage_amount(amount) -> int:
+    try:
+        return max(0, int(amount or 0))
+    except (TypeError, ValueError):
+        return 0
 #endregion
 
 
 #region STEP FUNCTIONS
 def step_get_input(state: GameState) -> GameState:
+    if state.get("should_end"):
+        return {
+            "current_choices": ["Continue."],
+        }
+
     if state.get("after_combat"):
         return {
             "current_choices": ["Go onward."],
@@ -195,10 +209,15 @@ def step_agent_think(state: GameState) -> GameState:
         tool_msg = {"action": name, **args}
 
     action = tool_msg.get("action")
+    if action == "deal_damage":
+        action = "damage"
+    amount = tool_msg.get("amount", 0)
+
     return {
         "last_cmd": "continue" if (action == "nothing" or action is None) else action,
         "current_monster_name": tool_msg.get("enemy", None),
-        "heal_amount": tool_msg.get("amount", 0),
+        "heal_amount": amount if action == "heal" else 0,
+        "damage_amount": amount if action == "damage" else 0,
     }
 
 def step_prepare_combat(state: GameState) -> GameState:
@@ -258,6 +277,29 @@ def step_generate_story(state: GameState) -> GameState:
         state["heal_amount"] = 0
         state["actual_heal_amount"] = actual_heal_amount
 
+    elif cmd == "damage":
+        requested_damage_amount = normalize_damage_amount(state.get("damage_amount", 0))
+        previous_hp = state["player"].hp
+        state["player"].hp = max(0, previous_hp - requested_damage_amount)
+        actual_damage_amount = previous_hp - state["player"].hp
+        player_has_died = state["player"].hp <= 0
+
+        prompt = build_post_damage_story_prompt(
+            player_summary=player_summary,
+            chat_history=chat_hist,
+            latest_user=q,
+            requested_damage_amount=requested_damage_amount,
+            actual_damage_amount=actual_damage_amount,
+            current_hp=state["player"].hp,
+            max_hp=state["player"].max_hp,
+            player_has_died=player_has_died,
+        )
+
+        state["last_cmd"] = "continue"
+        state["damage_amount"] = 0
+        state["actual_damage_amount"] = actual_damage_amount
+        state["should_end"] = player_has_died
+
     else:
         prompt = build_regular_story_prompt(
             player_summary=player_summary,
@@ -274,6 +316,11 @@ def step_generate_story(state: GameState) -> GameState:
         "current_story": story,
         "story_steps": state["story_steps"] + 1,
         "last_cmd": state["last_cmd"],
+        "should_end": state.get("should_end", False),
+        "heal_amount": state.get("heal_amount", 0),
+        "actual_heal_amount": state.get("actual_heal_amount", 0),
+        "damage_amount": state.get("damage_amount", 0),
+        "actual_damage_amount": state.get("actual_damage_amount", 0),
     }
 #endregion
 
@@ -296,6 +343,7 @@ def build_post_input_graph(builder: StateGraph):
         {
             "combat": "generate_story",
             "heal": "generate_story",
+            "damage": "generate_story",
             "continue": "agent_think",
         }
     )
@@ -306,6 +354,7 @@ def build_post_input_graph(builder: StateGraph):
         {
             "combat": "prepare_combat",
             "heal": "generate_story",
+            "damage": "generate_story",
             "continue": "generate_story",
             "end": END,
         }

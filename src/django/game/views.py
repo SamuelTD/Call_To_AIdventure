@@ -3,7 +3,9 @@ from django.views import View
 from django.views.generic import TemplateView
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from django.shortcuts import render
+from django.shortcuts import redirect, render
+from django.contrib.auth import login
+from django.contrib.auth.forms import UserCreationForm
 from utils.adventure import load_all_adventures
 from utils.player import Player
 
@@ -143,6 +145,12 @@ class StepGameView(View):
         request.session.modified = True
 
         player_sheet = build_character_sheet(state["player"])
+
+        if result["mode"] == "gameover":
+            return JsonResponse({
+                "mode": "gameover",
+                "player": player_sheet,
+            })
         
         # Return response depending on mode
         # COMBAT BRANCH
@@ -251,9 +259,34 @@ class CombatStateView(View):
 
 class CombatPageView(TemplateView):
     template_name = "game/combat.html"    
+
+class GameOverPageView(TemplateView):
+    template_name = "game/gameover.html"
     
 class LandingPageView(TemplateView):
     template_name = "game/landing.html"
+
+class SignupView(View):
+    template_name = "registration/signup.html"
+
+    def get(self, request):
+        if request.user.is_authenticated:
+            return redirect("landing")
+
+        return render(request, self.template_name, {"form": UserCreationForm()})
+
+    def post(self, request):
+        if request.user.is_authenticated:
+            return redirect("landing")
+
+        form = UserCreationForm(request.POST)
+
+        if form.is_valid():
+            user = form.save()
+            login(request, user)
+            return redirect("landing")
+
+        return render(request, self.template_name, {"form": form})
 
 class AdventureListView(View):
     def get(self, request):

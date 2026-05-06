@@ -5,6 +5,7 @@ from .story import (
     build_pre_combat_fluff_prompt,
     build_post_combat_story_prompt,
     build_post_heal_story_prompt,
+    build_post_damage_story_prompt,
     build_regular_story_prompt,
 )
 
@@ -16,5 +17,6 @@ __all__ = [
     "build_pre_combat_fluff_prompt",
     "build_post_combat_story_prompt",
     "build_post_heal_story_prompt",
+    "build_post_damage_story_prompt",
     "build_regular_story_prompt",
 ]

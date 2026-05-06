@@ -207,6 +207,7 @@
         const API_STEP_URL = "{% url 'api_step' %}";
         const PLAY_URL = "{% url 'play' %}";
         const COMBAT_URL = "{% url 'combat' %}";
+        const GAMEOVER_URL = "{% url 'gameover' %}";
 
         const titleEl = document.getElementById("adventure-title");
         const storyBox = document.getElementById("story-box");
@@ -332,6 +333,11 @@
                 if (data.mode === "combat") {
                     sessionStorage.setItem("combat_fluff", data.combat_fluff || "");
                     window.location.href = COMBAT_URL;
+                    return;
+                }
+
+                if (data.mode === "gameover") {
+                    window.location.href = GAMEOVER_URL;
                     return;
                 }
 

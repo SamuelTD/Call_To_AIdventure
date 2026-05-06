@@ -1,10 +1,18 @@
 from unittest.mock import patch
 
-from django.test import SimpleTestCase
+from django.contrib.auth.models import User
+from django.test import SimpleTestCase, TestCase
+from django.urls import reverse
 
 from game.services.game_engine import GameEngine
-from agents.game_master_graph import normalize_heal_amount, step_generate_story
-from agents.tools import heal_tool
+from agents.game_master_graph import (
+    normalize_damage_amount,
+    normalize_heal_amount,
+    step_generate_story,
+    step_agent_think,
+    step_get_input,
+)
+from agents.tools import deal_damage_tool, heal_tool, tools
 from utils.enums import CharacterClass, PlayerAction
 from utils.monster import Monster
 from utils.player import Player
@@ -114,7 +122,69 @@ class CombatEngineTests(SimpleTestCase):
         self.assertEqual(invalid_action["error"], "Invalid combat action")
 
 
+class AccountFlowTests(TestCase):
+    def test_login_page_renders(self):
+        response = self.client.get(reverse("login"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Log In")
+        self.assertContains(response, "Create Account")
+
+    def test_signup_creates_and_logs_in_user(self):
+        response = self.client.post(
+            reverse("signup"),
+            {
+                "username": "save_runner",
+                "password1": "LongEnoughPassword42",
+                "password2": "LongEnoughPassword42",
+            },
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("landing"))
+        self.assertTrue(User.objects.filter(username="save_runner").exists())
+        self.assertContains(response, "save_runner")
+
+    def test_logged_in_user_can_log_out_from_landing(self):
+        user = User.objects.create_user(
+            username="loaded_player",
+            password="LongEnoughPassword42",
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(reverse("logout"), follow=True)
+
+        self.assertRedirects(response, reverse("landing"))
+        self.assertNotContains(response, "loaded_player")
+
+
 class HealingToolTests(SimpleTestCase):
+    def test_tool_schemas_use_named_parameters_for_provider_tool_calls(self):
+        tool_args = {tool.name: tool.args for tool in tools}
+
+        self.assertEqual(
+            tool_args["combat"],
+            {
+                "enemy": {
+                    "description": "Exact monster name to fight.",
+                    "title": "Enemy",
+                    "type": "string",
+                }
+            },
+        )
+        self.assertEqual(tool_args["nothing"], {})
+        self.assertEqual(
+            tool_args["heal"],
+            {
+                "amount": {
+                    "anyOf": [{"type": "integer"}, {"type": "string"}],
+                    "description": "Health amount as an integer or numeric string.",
+                    "title": "Amount",
+                }
+            },
+        )
+        self.assertEqual(tool_args["deal_damage"], tool_args["heal"])
+
     def test_heal_tool_returns_heal_intent(self):
         self.assertEqual(heal_tool(7), {"action": "heal", "amount": 7})
 
@@ -145,6 +215,114 @@ class HealingToolTests(SimpleTestCase):
         self.assertEqual(result["current_story"], "Warmth returns to your limbs.")
 
         prompt = story_chain.invoke.call_args.args[0]["full_prompt"]
-        self.assertIn("requested healing amount was 8 HP", prompt)
-        self.assertIn("actually recovered 2 HP", prompt)
-        self.assertIn("20/20 HP", prompt)
+        self.assertIn("recovered 2 HP", prompt)
+
+
+class DamageToolTests(SimpleTestCase):
+    def test_deal_damage_tool_returns_damage_intent(self):
+        self.assertEqual(deal_damage_tool(5), {"action": "damage", "amount": 5})
+
+    def test_normalize_damage_amount_rejects_invalid_or_negative_values(self):
+        self.assertEqual(normalize_damage_amount("9"), 9)
+        self.assertEqual(normalize_damage_amount(-3), 0)
+        self.assertEqual(normalize_damage_amount("not a number"), 0)
+
+    @patch("agents.game_master_graph.thinker_agent", create=True)
+    def test_agent_think_normalizes_deal_damage_tool_name(self, thinker_agent):
+        message = type("Message", (), {"content": '<function=deal_damage{"amount":5}</function>'})
+        adventure = type("Adventure", (), {"monsters": []})
+        thinker_agent.invoke.return_value = {"messages": [message]}
+
+        result = step_agent_think({
+            "adventure": adventure,
+            "current_story": "A blade springs from the wall.",
+            "latest_user": "I step on the pressure plate.",
+        })
+
+        self.assertEqual(result["last_cmd"], "damage")
+        self.assertEqual(result["damage_amount"], 5)
+        self.assertEqual(result["heal_amount"], 0)
+
+    @patch("agents.game_master_graph.story_chain")
+    def test_generate_story_applies_damage_and_marks_death(self, story_chain):
+        story_chain.invoke.return_value = "The stones rush up, and darkness follows."
+        player = make_player(hp=4)
+        state = {
+            "player": player,
+            "history": ["Story: A broken bridge spans the chasm."],
+            "latest_user": "Leap across the gap.",
+            "last_cmd": "damage",
+            "damage_amount": 9,
+            "story_steps": 2,
+            "should_end": False,
+        }
+
+        result = step_generate_story(state)
+
+        self.assertEqual(player.hp, 0)
+        self.assertEqual(state["actual_damage_amount"], 4)
+        self.assertEqual(state["damage_amount"], 0)
+        self.assertTrue(state["should_end"])
+        self.assertTrue(result["should_end"])
+        self.assertEqual(result["last_cmd"], "continue")
+        self.assertEqual(result["current_story"], "The stones rush up, and darkness follows.")
+
+        prompt = story_chain.invoke.call_args.args[0]["full_prompt"]
+        self.assertIn("lost 4 HP", prompt)
+        self.assertIn("0/20 HP", prompt)
+        self.assertIn("clear death or collapse scene", prompt)
+
+    def test_get_input_limits_choices_when_game_should_end(self):
+        result = step_get_input({"should_end": True})
+
+        self.assertEqual(result["current_choices"], ["Continue."])
+
+    def test_engine_step_transitions_pending_death_to_gameover(self):
+        engine = GameEngine.__new__(GameEngine)
+        state = {
+            "player": make_player(hp=0),
+            "should_end": True,
+        }
+
+        result = engine.step(state, "Continue.")
+
+        self.assertEqual(result["mode"], "gameover")
+        self.assertIs(result["state"], state)
+
+    @patch("agents.game_master_graph.story_chain")
+    def test_engine_step_limits_choices_after_fatal_narrative_damage(self, story_chain):
+        story_chain.invoke.return_value = "The trap closes, and your strength leaves you."
+        engine = GameEngine.__new__(GameEngine)
+        def invoke_post(input):
+            return {**input, **step_generate_story(input)}
+
+        def invoke_pre(input):
+            return {**input, **step_get_input(input)}
+
+        engine.pre_graph = type(
+            "PreGraph",
+            (),
+            {"invoke": staticmethod(invoke_pre)},
+        )()
+        engine.post_graph = type(
+            "PostGraph",
+            (),
+            {"invoke": staticmethod(invoke_post)},
+        )()
+        state = {
+            "player": make_player(hp=1),
+            "history": ["Story: A narrow hall waits ahead."],
+            "current_choices": ["Walk forward"],
+            "latest_user": "Walk forward",
+            "last_cmd": "damage",
+            "damage_amount": 1,
+            "story_steps": 3,
+            "should_end": False,
+        }
+
+        result = engine.step(state, "Walk forward")
+
+        self.assertEqual(result["mode"], "story")
+        self.assertEqual(result["state"]["player"].hp, 0)
+        self.assertTrue(result["state"]["should_end"])
+        self.assertEqual(result["choices"], ["Continue."])

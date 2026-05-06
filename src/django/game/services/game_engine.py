@@ -36,6 +36,12 @@ class GameEngine:
         """
         Equivalent of the old step() function.
         """
+        if state.get("should_end"):
+            return {
+                "state": state,
+                "mode": "gameover",
+            }
+
         state = self.post_graph.invoke(
             input={**state, "latest_user": choice}
         )

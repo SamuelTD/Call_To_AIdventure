@@ -53,6 +53,8 @@ def initialize_game(user, adventure_id: str):
         "current_choices": [],
         "heal_amount": 0,
         "actual_heal_amount": 0,
+        "damage_amount": 0,
+        "actual_damage_amount": 0,
     }
     
     serializable_state = make_serializable_state(state)

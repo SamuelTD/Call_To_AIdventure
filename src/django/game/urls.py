@@ -4,10 +4,11 @@ from .views import (
     DebugPageView, StepGameView, StartCombatView, 
     CombatActionView, AdventureListView, LandingPageView,
     PlayPageView, CurrentGameStateView, CombatPageView,
-    CombatStateView)
+    CombatStateView, GameOverPageView, SignupView)
 
 urlpatterns = [
     path("", LandingPageView.as_view(), name="landing"),
+    path("accounts/signup/", SignupView.as_view(), name="signup"),
     path("play/", PlayPageView.as_view(), name="play"),
     path("health", HealthView.as_view(), name="health"),
     path("debug", DebugPageView.as_view(), name="debug"),
@@ -18,6 +19,7 @@ urlpatterns = [
     path("api/combat/start", StartCombatView.as_view(), name="api_combat_start"),
     path("api/combat/action", CombatActionView.as_view(), name="api_combat_action"),
     path("combat/", CombatPageView.as_view(), name="combat"),
+    path("gameover/", GameOverPageView.as_view(), name="gameover"),
     path("api/combat/state/", CombatStateView.as_view(), name="api_combat_state"),
     path("api/state/", CurrentGameStateView.as_view(), name="api_state"),
 ]
