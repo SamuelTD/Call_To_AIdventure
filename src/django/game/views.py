@@ -33,20 +33,6 @@ def build_character_sheet(player):
         "inventory_markdown": inventory_md,
     }
 
-def build_character_sheet(player):
-    inv = player.inventory if player.inventory else []
-
-    return {
-        "name": player.name,
-        "class": player.p_class.value,
-        "race": player.race,
-        "gold": player.gold,
-        "hp": player.hp,
-        "max_hp": player.max_hp,
-        "weapon": player.weapon.name if player.weapon else "None",
-        "inventory": inv,
-    }
-
 def build_combat_state_payload(state):
     player = state["player"]
     monster = state.get("current_monster")
@@ -197,6 +183,9 @@ class StartCombatView(View):
 
         state = result["state"]
 
+        if result.get("mode") == "error":
+            return JsonResponse({"error": result.get("error", "Failed to start combat")}, status=400)
+
         request.session["game_state"] = make_serializable_state(state)
         request.session.modified = True
 
@@ -229,6 +218,9 @@ class CombatActionView(View):
         result = engine.combat_action(state, action)
 
         state = result["state"]
+
+        if result.get("mode") == "error":
+            return JsonResponse({"error": result.get("error", "Combat action failed")}, status=400)
 
         request.session["game_state"] = make_serializable_state(state)
         request.session.modified = True
@@ -299,24 +291,3 @@ class CurrentGameStateView(View):
             "player": player_sheet,
             "adventure_name": state["adventure"].name if state.get("adventure") else "Adventure",
         })
-
-class CurrentMonsterImageView(View):
-    def get(self, request):
-        serialized_state = request.session.get("game_state")
-
-        if not serialized_state:
-            raise Http404("No active game")
-
-        state = rebuild_state(serialized_state)
-        monster_name = state.get("current_monster_name")
-
-        if not monster_name:
-            raise Http404("No active monster")
-
-        filename = f"{monster_name.replace(' ', '_')}.png"
-        image_path = PROJECT_ROOT / "data" / "pictures" / filename
-
-        if not image_path.exists():
-            raise Http404(f"Monster image not found: {filename}")
-
-        return FileResponse(open(image_path, "rb"), content_type="image/png")

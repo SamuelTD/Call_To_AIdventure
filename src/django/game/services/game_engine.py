@@ -1,14 +1,22 @@
 from langgraph.graph import StateGraph
 import random
-from combat.core import setup_combat, player_action, monster_attack, get_current_combat_state
+from combat.core import (
+    setup_combat,
+    restore_combat,
+    player_action,
+    monster_attack,
+    get_current_combat_state,
+)
 from utils.enums import PlayerAction
 from agents.game_master_graph import (
     GameState,
     build_pre_input_graph,
     build_post_input_graph,
+    initialize_graph_runtime
 )
 from langchain.agents import create_agent
-from agents.game_master_graph import tools, llm
+from agents.game_master_graph import tools
+from agents.llm_runtime import llm
 
 class GameEngine:
 
@@ -17,22 +25,9 @@ class GameEngine:
         self.post_graph = build_post_input_graph(StateGraph(GameState))
 
     def initialize(self, state):
-        from agents import game_master_graph as graph_module
-
-        graph_module.thinker_agent = create_agent(llm, tools)
-
-        graph_module.instruction = (
-            "You are the assistant to a fantasy Game Master.\n"
-            "You have exactly two tools available:\n"
-            "  • combat(enemy: str) — start a fight with that monster\n"
-            "  • nothing(_)        — continue the story without combat\n\n"
-            "You must respond with exactly one JSON object calling one of these tools—no extra text.\n\n"
-            "You may also infer from the user’s description whether one of the known monsters is present—even if they don’t name it.\n\n"
-            f"Available monsters this adventure: {' - '.join(state['adventure'].monsters)}"
-        )
-
+        
+        initialize_graph_runtime(state)
         ctx = self.pre_graph.invoke(input=state)
-
         state["current_choices"] = ctx["current_choices"]
 
         return state
@@ -65,10 +60,33 @@ class GameEngine:
         }
     
     def start_combat(self, state):
+        if not state.get("current_monster_name"):
+            return {
+                "state": state,
+                "mode": "error",
+                "error": "No pending combat",
+            }
+
+        if state.get("current_monster") is not None:
+            restore_combat(state["player"], state["current_monster"])
+            payload = self._build_combat_payload(state)
+            payload["combat_log"] = payload["combat_log"] or "Combat already underway."
+            return {
+                "state": state,
+                "mode": "combat",
+                **payload,
+            }
+
         combat_log, state["current_monster"] = setup_combat(
             state["current_monster_name"],
             state["player"]
         )
+        if state["current_monster"] is None:
+            return {
+                "state": state,
+                "mode": "error",
+                "error": "Monster not found",
+            }
 
         combat_state = get_current_combat_state()
         if combat_state.get("player") is not None:
@@ -85,7 +103,24 @@ class GameEngine:
         }
 
     def combat_action(self, state, combat_action_value):
-        player_has_won, combat_log = player_action(PlayerAction(combat_action_value))
+        if state.get("current_monster") is None:
+            return {
+                "state": state,
+                "mode": "error",
+                "error": "No active combat",
+            }
+
+        restore_combat(state["player"], state["current_monster"])
+        try:
+            action = PlayerAction(combat_action_value)
+        except ValueError:
+            return {
+                "state": state,
+                "mode": "error",
+                "error": "Invalid combat action",
+            }
+
+        player_has_won, combat_log = player_action(action)
         player_has_died = False
 
         if not player_has_won:
