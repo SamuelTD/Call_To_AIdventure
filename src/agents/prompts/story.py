@@ -120,3 +120,67 @@ You can and should inflict bad outcomes on the player if it makes sense in the s
 
 User input: {latest_user}
 """.strip()
+
+
+def build_goal_evaluation_prompt(
+    player_summary: str,
+    chat_history: str,
+    latest_user: str,
+    current_story: str,
+    ongoing_goals: list[str],
+) -> str:
+    goals = "\n".join(f"- {goal}" for goal in ongoing_goals)
+
+    return f"""
+You evaluate adventure goal completion for a narrative role playing game.
+Only evaluate the ongoing goals listed below. Previously completed goals are intentionally absent.
+Mark a goal complete only when the latest resolved narrative clearly shows the player achieved it.
+Do not mark goals complete from vague hints, future intentions, or unrelated old context.
+Return only exact goal strings from the ongoing goals list.
+
+Here are the informations on the user:
+{player_summary}
+
+Recent adventure context:
+{chat_history}
+
+Latest user choice:
+{latest_user}
+
+Latest resolved narrative:
+{current_story}
+
+Ongoing goals:
+{goals}
+""".strip()
+
+
+def build_victory_wrapup_prompt(
+    player_summary: str,
+    chat_history: str,
+    latest_user: str,
+    current_story: str,
+    finished_goals: list[str],
+) -> str:
+    goals = "\n".join(f"- {goal}" for goal in finished_goals)
+
+    return f"""
+Here are the informations on the user:
+{player_summary}
+
+Here is the adventure so far:
+{chat_history}
+
+The player's latest choice was:
+{latest_user}
+
+The latest resolved narrative was:
+{current_story}
+
+All required adventure goals are complete:
+{goals}
+
+You are the Game Master for a narrative adventure game. Write a short final in-story wrap-up
+for this adventure. You write in the second person with a refined fantasy tone.
+Limit the wrap-up to four sentences maximum. Do not offer choices.
+""".strip()

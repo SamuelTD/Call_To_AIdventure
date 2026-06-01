@@ -30,12 +30,15 @@ from agents.prompts import (
     build_post_heal_story_prompt,
     build_post_damage_story_prompt,
     build_regular_story_prompt,
+    build_goal_evaluation_prompt,
+    build_victory_wrapup_prompt,
 )
 
 from agents.llm_runtime import (
     story_chain,
     summary_chain,
     choicer_chain,
+    goal_evaluator_chain,
     build_thinker_agent,
 )
 #endregion
@@ -75,6 +78,10 @@ class GameState(TypedDict, total=False):
     actual_heal_amount: int
     damage_amount: int
     actual_damage_amount: int
+    ongoing_goals: list[str]
+    finished_goals: list[str]
+    adventure_completed: bool
+    end_reason: str | None
 #endregion
 
 #region RUNTIME INIT
@@ -151,6 +158,10 @@ def normalize_damage_amount(amount) -> int:
         return max(0, int(amount or 0))
     except (TypeError, ValueError):
         return 0
+
+def completed_ongoing_goals(ongoing_goals: list[str], completed_goals: list[str]) -> list[str]:
+    ongoing_set = set(ongoing_goals)
+    return [goal for goal in completed_goals if goal in ongoing_set]
 #endregion
 
 
@@ -299,6 +310,8 @@ def step_generate_story(state: GameState) -> GameState:
         state["damage_amount"] = 0
         state["actual_damage_amount"] = actual_damage_amount
         state["should_end"] = player_has_died
+        if player_has_died:
+            state["end_reason"] = "death"
 
     else:
         prompt = build_regular_story_prompt(
@@ -317,10 +330,78 @@ def step_generate_story(state: GameState) -> GameState:
         "story_steps": state["story_steps"] + 1,
         "last_cmd": state["last_cmd"],
         "should_end": state.get("should_end", False),
+        "end_reason": state.get("end_reason"),
         "heal_amount": state.get("heal_amount", 0),
         "actual_heal_amount": state.get("actual_heal_amount", 0),
         "damage_amount": state.get("damage_amount", 0),
         "actual_damage_amount": state.get("actual_damage_amount", 0),
+    }
+
+def step_evaluate_goals(state: GameState) -> GameState:
+    if state.get("should_end"):
+        return {}
+
+    ongoing_goals = list(state.get("ongoing_goals") or [])
+    if not ongoing_goals:
+        return {
+            "adventure_completed": True,
+        }
+
+    history = compress_history(state.get("history", []))
+    prompt = build_goal_evaluation_prompt(
+        player_summary=state["player"].get_summary(),
+        chat_history="\n".join(history),
+        latest_user=state.get("latest_user", ""),
+        current_story=state.get("current_story", ""),
+        ongoing_goals=ongoing_goals,
+    )
+
+    try:
+        result = goal_evaluator_chain.invoke({"full_prompt": prompt})
+        completed_goals = completed_ongoing_goals(ongoing_goals, result.completed_goals)
+    except Exception as e:
+        print("ERROR GOAL EVALUATION:", e)
+        completed_goals = []
+
+    if not completed_goals:
+        return {
+            "ongoing_goals": ongoing_goals,
+            "finished_goals": list(state.get("finished_goals") or []),
+            "adventure_completed": False,
+        }
+
+    finished_goals = list(state.get("finished_goals") or [])
+    for goal in completed_goals:
+        if goal not in finished_goals:
+            finished_goals.append(goal)
+
+    remaining_goals = [goal for goal in ongoing_goals if goal not in completed_goals]
+
+    return {
+        "ongoing_goals": remaining_goals,
+        "finished_goals": finished_goals,
+        "adventure_completed": not remaining_goals,
+    }
+
+def step_generate_victory_wrapup(state: GameState) -> GameState:
+    history = compress_history(state.get("history", []))
+    prompt = build_victory_wrapup_prompt(
+        player_summary=state["player"].get_summary(),
+        chat_history="\n".join(history),
+        latest_user=state.get("latest_user", ""),
+        current_story=state.get("current_story", ""),
+        finished_goals=list(state.get("finished_goals") or []),
+    )
+
+    story = story_chain.invoke({"full_prompt": prompt}).strip()
+
+    return {
+        "history": history + [f"Story: {story}"],
+        "current_story": story,
+        "current_choices": ["Continue."],
+        "should_end": True,
+        "end_reason": "victory",
+        "adventure_completed": True,
     }
 #endregion
 
@@ -336,6 +417,8 @@ def build_post_input_graph(builder: StateGraph):
     builder.add_node("agent_think", step_agent_think)
     builder.add_node("prepare_combat", step_prepare_combat)
     builder.add_node("generate_story", step_generate_story)
+    builder.add_node("evaluate_goals", step_evaluate_goals)
+    builder.add_node("generate_victory_wrapup", step_generate_victory_wrapup)
 
     builder.add_conditional_edges(
         START,
@@ -361,7 +444,16 @@ def build_post_input_graph(builder: StateGraph):
     )
 
     builder.add_edge("prepare_combat", END)
-    builder.add_edge("generate_story", END)
+    builder.add_edge("generate_story", "evaluate_goals")
+    builder.add_conditional_edges(
+        "evaluate_goals",
+        lambda s: "victory" if s.get("adventure_completed") and not s.get("should_end") else "continue",
+        {
+            "victory": "generate_victory_wrapup",
+            "continue": END,
+        }
+    )
+    builder.add_edge("generate_victory_wrapup", END)
 
     return builder.compile()
 #endregion

@@ -7,12 +7,14 @@ from django.urls import reverse
 
 from game.models import SaveGame
 from game.services.game_engine import GameEngine
-from game.services.tools import make_serializable_state
+from game.services.tools import ensure_goal_state, make_serializable_state
 from agents.game_master_graph import (
     normalize_damage_amount,
     normalize_heal_amount,
     step_generate_story,
     step_agent_think,
+    step_evaluate_goals,
+    step_generate_victory_wrapup,
     step_get_input,
 )
 from agents.tools import deal_damage_tool, heal_tool, tools
@@ -54,6 +56,7 @@ def make_adventure():
         id="emerald_sword",
         name="The Emerald Sword",
         description="A test adventure.",
+        goals=["Retrieve the Emerald Sword."],
         monsters=[],
         npcs=[],
         locations=[],
@@ -68,6 +71,10 @@ def make_game_state():
         "history": ["An old road waits."],
         "story_steps": 1,
         "should_end": False,
+        "ongoing_goals": list(adventure.goals),
+        "finished_goals": [],
+        "adventure_completed": False,
+        "end_reason": None,
         "current_story": "An old road waits.",
         "current_choices": ["Walk onward."],
         "last_cmd": "continue",
@@ -188,6 +195,41 @@ class AccountFlowTests(TestCase):
 
 
 class SaveGamePersistenceTests(TestCase):
+    def test_goal_state_backfill_uses_unfinished_adventure_goals(self):
+        state = {
+            "adventure": make_adventure(),
+            "finished_goals": ["Retrieve the Emerald Sword."],
+        }
+
+        ensured_state = ensure_goal_state(state)
+
+        self.assertEqual(ensured_state["finished_goals"], ["Retrieve the Emerald Sword."])
+        self.assertEqual(ensured_state["ongoing_goals"], [])
+        self.assertFalse(ensured_state["adventure_completed"])
+        self.assertIsNone(ensured_state["end_reason"])
+
+    def test_goal_state_backfill_preserves_existing_ongoing_goals(self):
+        state = {
+            "adventure": make_adventure(),
+            "ongoing_goals": ["Find the hidden vault."],
+            "finished_goals": [],
+        }
+
+        ensured_state = ensure_goal_state(state)
+
+        self.assertEqual(ensured_state["ongoing_goals"], ["Find the hidden vault."])
+
+    def test_goal_state_backfill_removes_finished_goals_from_ongoing_goals(self):
+        state = {
+            "adventure": make_adventure(),
+            "ongoing_goals": ["Retrieve the Emerald Sword.", "Find the hidden vault."],
+            "finished_goals": ["Retrieve the Emerald Sword."],
+        }
+
+        ensured_state = ensure_goal_state(state)
+
+        self.assertEqual(ensured_state["ongoing_goals"], ["Find the hidden vault."])
+
     @patch("game.views.get_engine")
     @patch("game.views.initialize_game")
     def test_anonymous_start_keeps_state_in_session_without_db_save(
@@ -293,7 +335,7 @@ class SaveGamePersistenceTests(TestCase):
             user=user,
             adventure_id=state["adventure"].id,
             adventure_name="Finished Run",
-            state=make_serializable_state(state),
+            state={**make_serializable_state(state), "end_reason": "victory"},
             is_finished=True,
             finished_at=timezone.now(),
         )
@@ -305,6 +347,7 @@ class SaveGamePersistenceTests(TestCase):
         self.assertEqual([save["id"] for save in payload["saves"]], [active_save.id])
         self.assertEqual([save["id"] for save in payload["history"]], [finished_save.id])
         self.assertTrue(payload["history"][0]["is_finished"])
+        self.assertEqual(payload["history"][0]["ending_reason"], "Ending: Victory")
 
     def test_finished_save_cannot_be_loaded(self):
         user = User.objects.create_user(
@@ -362,6 +405,60 @@ class SaveGamePersistenceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(save.is_finished)
         self.assertIsNotNone(save.finished_at)
+
+    @patch("game.views.get_engine")
+    def test_adventure_victory_marks_current_save_as_finished(self, get_engine):
+        user = User.objects.create_user(
+            username="victorious_runner",
+            password="LongEnoughPassword42",
+        )
+        self.client.force_login(user)
+        state = make_game_state()
+        state["should_end"] = True
+        state["end_reason"] = "victory"
+        save = SaveGame.objects.create(
+            user=user,
+            adventure_id=state["adventure"].id,
+            adventure_name=state["adventure"].name,
+            state=make_serializable_state(state),
+        )
+        session = self.client.session
+        session["game_state"] = make_serializable_state(state)
+        session["save_game_id"] = save.id
+        session.save()
+        get_engine.return_value.step.return_value = {
+            "state": state,
+            "mode": "adventure_victory",
+        }
+
+        response = self.client.post(
+            reverse("api_step"),
+            {"choice": "Continue."},
+            content_type="application/json",
+        )
+
+        save.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["mode"], "adventure_victory")
+        self.assertTrue(save.is_finished)
+        self.assertIsNotNone(save.finished_at)
+
+    @patch("game.views.load_adv_outro")
+    def test_victory_page_displays_adventure_outro(self, load_adv_outro):
+        load_adv_outro.return_value = "The realm remembers your courage."
+        state = make_game_state()
+        state["should_end"] = True
+        state["end_reason"] = "victory"
+        session = self.client.session
+        session["game_state"] = make_serializable_state(state)
+        session.save()
+
+        response = self.client.get(reverse("victory"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "The Emerald Sword")
+        self.assertContains(response, "The realm remembers your courage.")
+        load_adv_outro.assert_called_once_with("emerald_sword")
 
     @patch("game.views.get_engine")
     def test_combat_defeat_marks_current_save_as_finished(self, get_engine):
@@ -533,6 +630,19 @@ class DamageToolTests(SimpleTestCase):
         self.assertEqual(result["mode"], "gameover")
         self.assertIs(result["state"], state)
 
+    def test_engine_step_transitions_pending_victory_to_adventure_victory(self):
+        engine = GameEngine.__new__(GameEngine)
+        state = {
+            "player": make_player(),
+            "should_end": True,
+            "end_reason": "victory",
+        }
+
+        result = engine.step(state, "Continue.")
+
+        self.assertEqual(result["mode"], "adventure_victory")
+        self.assertIs(result["state"], state)
+
     @patch("agents.game_master_graph.story_chain")
     def test_engine_step_limits_choices_after_fatal_narrative_damage(self, story_chain):
         story_chain.invoke.return_value = "The trap closes, and your strength leaves you."
@@ -570,3 +680,59 @@ class DamageToolTests(SimpleTestCase):
         self.assertEqual(result["state"]["player"].hp, 0)
         self.assertTrue(result["state"]["should_end"])
         self.assertEqual(result["choices"], ["Continue."])
+
+
+class GoalEvaluationTests(SimpleTestCase):
+    @patch("agents.game_master_graph.goal_evaluator_chain")
+    def test_evaluate_goals_moves_only_exact_ongoing_goal_matches(self, goal_evaluator_chain):
+        result = type(
+            "GoalResult",
+            (),
+            {
+                "completed_goals": [
+                    "Retrieve the Emerald Sword.",
+                    "Invented extra goal.",
+                ]
+            },
+        )()
+        goal_evaluator_chain.invoke.return_value = result
+        state = make_game_state()
+
+        output = step_evaluate_goals(state)
+
+        self.assertEqual(output["finished_goals"], ["Retrieve the Emerald Sword."])
+        self.assertEqual(output["ongoing_goals"], [])
+        self.assertTrue(output["adventure_completed"])
+
+    @patch("agents.game_master_graph.goal_evaluator_chain")
+    def test_evaluate_goals_ignores_already_finished_goal_context(self, goal_evaluator_chain):
+        state = make_game_state()
+        state["finished_goals"] = ["Retrieve the Emerald Sword."]
+        state["ongoing_goals"] = ["Find the hidden vault."]
+        goal_evaluator_chain.invoke.return_value = type(
+            "GoalResult",
+            (),
+            {"completed_goals": ["Retrieve the Emerald Sword."]},
+        )()
+
+        output = step_evaluate_goals(state)
+
+        self.assertEqual(output["finished_goals"], ["Retrieve the Emerald Sword."])
+        self.assertEqual(output["ongoing_goals"], ["Find the hidden vault."])
+        self.assertFalse(output["adventure_completed"])
+
+    @patch("agents.game_master_graph.story_chain")
+    def test_victory_wrapup_marks_story_as_victory_ending(self, story_chain):
+        story_chain.invoke.return_value = "The sword rises, and the realm breathes again."
+        state = make_game_state()
+        state["ongoing_goals"] = []
+        state["finished_goals"] = ["Retrieve the Emerald Sword."]
+        state["latest_user"] = "Take the sword."
+
+        output = step_generate_victory_wrapup(state)
+
+        self.assertTrue(output["should_end"])
+        self.assertEqual(output["end_reason"], "victory")
+        self.assertTrue(output["adventure_completed"])
+        self.assertEqual(output["current_choices"], ["Continue."])
+        self.assertEqual(output["current_story"], "The sword rises, and the realm breathes again.")

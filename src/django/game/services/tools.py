@@ -4,6 +4,21 @@ from utils.player import Player, load_player
 from utils.adventure import Adventure, load_all_adventures, load_adv_intro
 from utils.monster import Monster
 
+def ensure_goal_state(state: dict) -> dict:
+    adventure = state.get("adventure")
+    adventure_goals = list(adventure.goals) if adventure else []
+    finished_goals = list(state.get("finished_goals") or [])
+    ongoing_goals = list(state.get("ongoing_goals") or [
+        goal for goal in adventure_goals if goal not in finished_goals
+    ])
+
+    state["finished_goals"] = finished_goals
+    state["ongoing_goals"] = [goal for goal in ongoing_goals if goal not in finished_goals]
+    state.setdefault("adventure_completed", False)
+    state.setdefault("end_reason", None)
+
+    return state
+
 def make_serializable_state(state: dict) -> dict:
     safe = state.copy()
 
@@ -31,7 +46,7 @@ def rebuild_state(serialized_state: dict) -> dict:
     if state.get("current_monster"):
         state["current_monster"] = Monster.from_dict(state["current_monster"])
 
-    return state
+    return ensure_goal_state(state)
 
 def persist_game(
     request,
@@ -99,6 +114,10 @@ def initialize_game(adventure_id: str):
         "after_combat": False,
         "last_choices": [],
         "current_choices": [],
+        "ongoing_goals": list(adventure.goals),
+        "finished_goals": [],
+        "adventure_completed": False,
+        "end_reason": None,
         "heal_amount": 0,
         "actual_heal_amount": 0,
         "damage_amount": 0,

@@ -6,7 +6,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import redirect, render
 from django.contrib.auth import login
 from django.contrib.auth.forms import UserCreationForm
-from utils.adventure import load_all_adventures
+from utils.adventure import load_adv_outro, load_all_adventures
 from utils.player import Player
 
 from game.models import SaveGame
@@ -49,6 +49,19 @@ def build_combat_state_payload(state):
         "player": build_character_sheet(player),
     }
 
+def build_ending_reason_label(state):
+    reason = state.get("end_reason")
+    player = state.get("player") or {}
+    player_hp = player.get("hp")
+
+    if reason == "victory":
+        return "Ending: Victory"
+    if reason == "death":
+        return "Ending: Death"
+    if player_hp == 0:
+        return "Ending: Defeat"
+    return "Ending: Finished"
+
 def build_save_game_payload(save_game):
     state = save_game.state or {}
     player = state.get("player") or {}
@@ -63,6 +76,7 @@ def build_save_game_payload(save_game):
         "player_hp": player.get("hp"),
         "player_max_hp": player.get("max_hp"),
         "story_preview": story[:180],
+        "ending_reason": build_ending_reason_label(state) if save_game.is_finished else "",
         "choice_count": len(choices),
         "is_finished": save_game.is_finished,
         "finished_at": save_game.finished_at.isoformat() if save_game.finished_at else None,
@@ -168,6 +182,13 @@ class StepGameView(View):
             persist_game(request, state, finish=True)
             return JsonResponse({
                 "mode": "gameover",
+                "player": player_sheet,
+            })
+
+        if result["mode"] == "adventure_victory":
+            persist_game(request, state, finish=True)
+            return JsonResponse({
+                "mode": "adventure_victory",
                 "player": player_sheet,
             })
 
@@ -282,6 +303,19 @@ class CombatPageView(TemplateView):
 
 class GameOverPageView(TemplateView):
     template_name = "game/gameover.html"
+
+class VictoryPageView(TemplateView):
+    template_name = "game/victory.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        serialized_state = self.request.session.get("game_state") or {}
+        state = rebuild_state(serialized_state) if serialized_state else {}
+        adventure = state.get("adventure")
+
+        context["adventure_name"] = adventure.name if adventure else "Adventure Complete"
+        context["outro"] = load_adv_outro(adventure.id) if adventure else ""
+        return context
     
 class LandingPageView(TemplateView):
     template_name = "game/landing.html"

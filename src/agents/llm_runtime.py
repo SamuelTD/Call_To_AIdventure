@@ -8,7 +8,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain.agents import create_agent
 
-from agents.schemas import ChoiceOutput
+from agents.schemas import ChoiceOutput, GoalEvaluationOutput
 from agents.tools import tools
 from agents.prompts import (
     CHOOSER_TEMPLATE,
@@ -36,6 +36,9 @@ summary_chain = SUMMARY_TEMPLATE | llm | StrOutputParser()
 
 choicer_model = llm.with_structured_output(ChoiceOutput)
 choicer_chain = CHOOSER_TEMPLATE | choicer_model
+
+goal_evaluator_model = llm.with_structured_output(GoalEvaluationOutput)
+goal_evaluator_chain = base_story_template | goal_evaluator_model
 
 
 def build_thinker_agent():

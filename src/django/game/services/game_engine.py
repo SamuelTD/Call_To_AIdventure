@@ -37,9 +37,10 @@ class GameEngine:
         Equivalent of the old step() function.
         """
         if state.get("should_end"):
+            mode = "adventure_victory" if state.get("end_reason") == "victory" else "gameover"
             return {
                 "state": state,
-                "mode": "gameover",
+                "mode": mode,
             }
 
         state = self.post_graph.invoke(

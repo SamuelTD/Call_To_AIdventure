@@ -370,7 +370,9 @@
 
                 const preview = document.createElement("div");
                 preview.className = "save-preview";
-                preview.textContent = save.story_preview || "The adventure has just begun.";
+                preview.textContent = save.is_finished
+                    ? (save.ending_reason || "Ending: Finished")
+                    : (save.story_preview || "The adventure has just begun.");
 
                 const actions = document.createElement("div");
                 actions.className = "save-actions";

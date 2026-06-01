@@ -67,7 +67,7 @@ def load_adventure(adv_id: str) -> Adventure:
         'id': id_,
         'name': name,
         'description': desc,
-        'goals': goals,
+        'goals': json.loads(goals),
         'monsters': json.loads(monsters),
         'npcs': json.loads(npcs),
         'locations': json.loads(locations),

@@ -208,6 +208,7 @@
         const PLAY_URL = "{% url 'play' %}";
         const COMBAT_URL = "{% url 'combat' %}";
         const GAMEOVER_URL = "{% url 'gameover' %}";
+        const VICTORY_URL = "{% url 'victory' %}";
 
         const titleEl = document.getElementById("adventure-title");
         const storyBox = document.getElementById("story-box");
@@ -338,6 +339,11 @@
 
                 if (data.mode === "gameover") {
                     window.location.href = GAMEOVER_URL;
+                    return;
+                }
+
+                if (data.mode === "adventure_victory") {
+                    window.location.href = VICTORY_URL;
                     return;
                 }
 
