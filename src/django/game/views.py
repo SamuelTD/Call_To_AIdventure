@@ -1,4 +1,5 @@
-from django.http import JsonResponse, HttpResponseBadRequest, FileResponse, Http404
+from django.http import JsonResponse, HttpResponseBadRequest, Http404
+from django.conf import settings
 from django.views import View
 from django.views.generic import TemplateView
 from django.utils.decorators import method_decorator
@@ -7,7 +8,6 @@ from django.shortcuts import redirect, render
 from django.contrib.auth import login
 from django.contrib.auth.forms import UserCreationForm
 from utils.adventure import load_adv_outro, load_all_adventures
-from utils.player import Player
 
 from game.models import SaveGame
 from game.services.tools import initialize_game, persist_game, rebuild_state
@@ -177,6 +177,16 @@ class StepGameView(View):
         state = result["state"]
 
         player_sheet = build_character_sheet(state["player"])
+
+        if result["mode"] == "service_unavailable":
+            return JsonResponse(
+                {
+                    "mode": "service_unavailable",
+                    "error": settings.LLM_SERVICE_UNAVAILABLE_MESSAGE,
+                    "player": player_sheet,
+                },
+                status=settings.LLM_SERVICE_UNAVAILABLE_STATUS_CODE,
+            )
 
         if result["mode"] == "gameover":
             persist_game(request, state, finish=True)

@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from django.urls import reverse
 
@@ -17,6 +17,7 @@ from agents.game_master_graph import (
     step_generate_victory_wrapup,
     step_get_input,
 )
+from agents.llm_resilience import TemporaryLLMServiceError
 from agents.tools import deal_damage_tool, heal_tool, tools
 from utils.adventure import Adventure
 from utils.enums import CharacterClass, PlayerAction
@@ -371,6 +372,46 @@ class SaveGamePersistenceTests(TestCase):
         self.assertEqual(response.json()["error"], "Finished games are in history and cannot be loaded")
 
     @patch("game.views.get_engine")
+    @override_settings(
+        LLM_SERVICE_UNAVAILABLE_MESSAGE="The storyteller is unavailable. Try again soon.",
+        LLM_SERVICE_UNAVAILABLE_STATUS_CODE=503,
+    )
+    def test_step_service_unavailable_does_not_persist_failed_state(self, get_engine):
+        user = User.objects.create_user(
+            username="paused_runner",
+            password="LongEnoughPassword42",
+        )
+        self.client.force_login(user)
+        state = make_game_state()
+        save = SaveGame.objects.create(
+            user=user,
+            adventure_id=state["adventure"].id,
+            adventure_name=state["adventure"].name,
+            state=make_serializable_state(state),
+        )
+        session = self.client.session
+        session["game_state"] = make_serializable_state(state)
+        session["save_game_id"] = save.id
+        session.save()
+        failed_state = {**state, "current_story": "This should not persist."}
+        get_engine.return_value.step.return_value = {
+            "state": failed_state,
+            "mode": "service_unavailable",
+        }
+
+        response = self.client.post(
+            reverse("api_step"),
+            {"choice": "Walk onward."},
+            content_type="application/json",
+        )
+
+        save.refresh_from_db()
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["mode"], "service_unavailable")
+        self.assertEqual(response.json()["error"], "The storyteller is unavailable. Try again soon.")
+        self.assertEqual(save.state["current_story"], "An old road waits.")
+
+    @patch("game.views.get_engine")
     def test_gameover_marks_current_save_as_finished(self, get_engine):
         user = User.objects.create_user(
             username="fallen_runner",
@@ -557,6 +598,65 @@ class HealingToolTests(SimpleTestCase):
 
         prompt = story_chain.invoke.call_args.args[0]["full_prompt"]
         self.assertIn("recovered 2 HP", prompt)
+
+    @override_settings(
+        LLM_RETRY_MAX_ATTEMPTS=2,
+        LLM_RETRY_INITIAL_DELAY_SECONDS=0,
+        LLM_RETRY_BACKOFF_MULTIPLIER=1,
+        LLM_RETRY_MAX_DELAY_SECONDS=0,
+        LLM_RETRY_JITTER_SECONDS=0,
+    )
+    @patch("agents.game_master_graph.story_chain")
+    def test_generate_story_retries_transient_story_failures(self, story_chain):
+        story_chain.invoke.side_effect = [
+            TimeoutError("temporary timeout"),
+            "Warmth returns after a brief silence.",
+        ]
+        player = make_player(hp=18)
+        state = {
+            "player": player,
+            "history": ["Story: You find a quiet shrine."],
+            "latest_user": "Drink from the silver font.",
+            "last_cmd": "heal",
+            "heal_amount": 8,
+            "story_steps": 2,
+        }
+
+        result = step_generate_story(state)
+
+        self.assertEqual(story_chain.invoke.call_count, 2)
+        self.assertEqual(result["current_story"], "Warmth returns after a brief silence.")
+        self.assertEqual(player.hp, 20)
+
+    @override_settings(
+        LLM_RETRY_MAX_ATTEMPTS=1,
+        LLM_RETRY_INITIAL_DELAY_SECONDS=0,
+        LLM_RETRY_BACKOFF_MULTIPLIER=1,
+        LLM_RETRY_MAX_DELAY_SECONDS=0,
+        LLM_RETRY_JITTER_SECONDS=0,
+    )
+    @patch("agents.game_master_graph.story_chain")
+    def test_generate_story_failure_leaves_state_unadvanced(self, story_chain):
+        story_chain.invoke.side_effect = TimeoutError("temporary timeout")
+        player = make_player(hp=18)
+        state = {
+            "player": player,
+            "history": ["Story: You find a quiet shrine."],
+            "current_story": "You find a quiet shrine.",
+            "latest_user": "Drink from the silver font.",
+            "last_cmd": "heal",
+            "heal_amount": 8,
+            "story_steps": 2,
+        }
+
+        with self.assertRaises(TemporaryLLMServiceError):
+            step_generate_story(state)
+
+        self.assertEqual(player.hp, 18)
+        self.assertEqual(state["history"], ["Story: You find a quiet shrine."])
+        self.assertEqual(state["story_steps"], 2)
+        self.assertEqual(state["last_cmd"], "heal")
+        self.assertEqual(state["heal_amount"], 8)
 
 
 class DamageToolTests(SimpleTestCase):

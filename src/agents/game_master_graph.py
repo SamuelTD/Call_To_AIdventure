@@ -5,24 +5,16 @@ import json
 import random
 
 from dotenv import load_dotenv
-from typing_extensions import TypedDict
-
-load_dotenv()
-
 from langgraph.graph import StateGraph, START, END
 from langchain.agents import AgentState
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage, SystemMessage
+from typing_extensions import TypedDict
 
 from utils.player import Player
 from utils.monster import Monster
 from utils.adventure import Adventure, load_adventure
 
-from agents.tools import tools
-from agents.schemas import ChoiceOutput
 from agents.prompts import (
-    CHOOSER_TEMPLATE,
-    SUMMARY_TEMPLATE,
     build_thinker_instruction,
     build_thinker_system_message,
     build_pre_combat_fluff_prompt,
@@ -41,7 +33,10 @@ from agents.llm_runtime import (
     goal_evaluator_chain,
     build_thinker_agent,
 )
+from agents.llm_resilience import invoke_llm_with_retries
 #endregion
+
+load_dotenv()
 
 
 #region CONFIG
@@ -103,11 +98,15 @@ def make_choice(history: list[str], player_summary: str, previous_choices: list[
     context = "\n".join(history)
     last_choices = " - ".join(previous_choices) if previous_choices else "None"
 
-    result = choicer_chain.invoke({
-        "context": context,
-        "player_summary": player_summary,
-        "last_choices": last_choices,
-    })
+    result = invoke_llm_with_retries(
+        choicer_chain.invoke,
+        {
+            "context": context,
+            "player_summary": player_summary,
+            "last_choices": last_choices,
+        },
+        call_name="choice generation",
+    )
 
     print("DEBUG CHOICES ==", result)
     return result.choices
@@ -117,7 +116,15 @@ def compress_history(history: list[str]) -> list[str]:
         return history
 
     to_summarize = "\n".join(history[:-4])
-    summary = summary_chain.invoke({"context": to_summarize}).strip()
+    try:
+        summary = invoke_llm_with_retries(
+            summary_chain.invoke,
+            {"context": to_summarize},
+            call_name="history compression",
+        ).strip()
+    except Exception as e:
+        print("ERROR HISTORY COMPRESSION:", e)
+        return history
 
     second_last_user = history[-4]
     second_last_story = history[-3]
@@ -207,7 +214,11 @@ def step_agent_think(state: GameState) -> GameState:
         )
     )
 
-    resp = thinker_agent.invoke({"messages": [sys_msg, human_msg]})
+    resp = invoke_llm_with_retries(
+        thinker_agent.invoke,
+        {"messages": [sys_msg, human_msg]},
+        call_name="agent thinking",
+    )
     content = resp["messages"][-1].content
     print("DEBUG THINKER RAW =", content)
 
@@ -237,7 +248,11 @@ def step_prepare_combat(state: GameState) -> GameState:
         state["latest_user"],
         state["current_monster_name"],
     )
-    fluff = story_chain.invoke({"full_prompt": prompt}).strip()
+    fluff = invoke_llm_with_retries(
+        story_chain.invoke,
+        {"full_prompt": prompt},
+        call_name="combat narration",
+    ).strip()
 
     return {"combat_fluff": fluff}
 
@@ -247,32 +262,44 @@ def step_generate_story(state: GameState) -> GameState:
     chat_hist = "\n".join(history)
     q = state["latest_user"]
     cmd = state["last_cmd"]
+    state_updates = {
+        "last_cmd": state["last_cmd"],
+        "should_end": state.get("should_end", False),
+        "end_reason": state.get("end_reason"),
+        "heal_amount": state.get("heal_amount", 0),
+        "actual_heal_amount": state.get("actual_heal_amount", 0),
+        "damage_amount": state.get("damage_amount", 0),
+        "actual_damage_amount": state.get("actual_damage_amount", 0),
+    }
 
     if cmd == "combat":
         enemy = state["current_monster_name"]
+        gold_loot = state["gold_loot"]
+        item_loot = state["item_loot"]
         prompt = build_post_combat_story_prompt(
             player_summary=player_summary,
             chat_history=chat_hist,
             enemy=enemy,
-            gold_loot=state["gold_loot"],
-            item_loot=state["item_loot"],
+            gold_loot=gold_loot,
+            item_loot=item_loot,
         )
 
-        state["player"].gold += state["gold_loot"]
-        state["last_cmd"] = "continue"
-        state["current_monster"] = None
-        state["current_monster_name"] = None
-        state["gold_loot"] = 0
-        state["item_loot"] = []
+        state_updates.update({
+            "last_cmd": "continue",
+            "current_monster": None,
+            "current_monster_name": None,
+            "gold_loot": 0,
+            "item_loot": [],
+        })
 
     elif cmd == "heal":
         requested_heal_amount = normalize_heal_amount(state.get("heal_amount", 0))
         previous_hp = state["player"].hp
-        state["player"].hp = min(
+        next_hp = min(
             state["player"].max_hp,
             previous_hp + requested_heal_amount,
         )
-        actual_heal_amount = state["player"].hp - previous_hp
+        actual_heal_amount = next_hp - previous_hp
 
         prompt = build_post_heal_story_prompt(
             player_summary=player_summary,
@@ -280,20 +307,22 @@ def step_generate_story(state: GameState) -> GameState:
             latest_user=q,
             requested_heal_amount=requested_heal_amount,
             actual_heal_amount=actual_heal_amount,
-            current_hp=state["player"].hp,
+            current_hp=next_hp,
             max_hp=state["player"].max_hp,
         )
 
-        state["last_cmd"] = "continue"
-        state["heal_amount"] = 0
-        state["actual_heal_amount"] = actual_heal_amount
+        state_updates.update({
+            "last_cmd": "continue",
+            "heal_amount": 0,
+            "actual_heal_amount": actual_heal_amount,
+        })
 
     elif cmd == "damage":
         requested_damage_amount = normalize_damage_amount(state.get("damage_amount", 0))
         previous_hp = state["player"].hp
-        state["player"].hp = max(0, previous_hp - requested_damage_amount)
-        actual_damage_amount = previous_hp - state["player"].hp
-        player_has_died = state["player"].hp <= 0
+        next_hp = max(0, previous_hp - requested_damage_amount)
+        actual_damage_amount = previous_hp - next_hp
+        player_has_died = next_hp <= 0
 
         prompt = build_post_damage_story_prompt(
             player_summary=player_summary,
@@ -301,17 +330,19 @@ def step_generate_story(state: GameState) -> GameState:
             latest_user=q,
             requested_damage_amount=requested_damage_amount,
             actual_damage_amount=actual_damage_amount,
-            current_hp=state["player"].hp,
+            current_hp=next_hp,
             max_hp=state["player"].max_hp,
             player_has_died=player_has_died,
         )
 
-        state["last_cmd"] = "continue"
-        state["damage_amount"] = 0
-        state["actual_damage_amount"] = actual_damage_amount
-        state["should_end"] = player_has_died
+        state_updates.update({
+            "last_cmd": "continue",
+            "damage_amount": 0,
+            "actual_damage_amount": actual_damage_amount,
+            "should_end": player_has_died,
+        })
         if player_has_died:
-            state["end_reason"] = "death"
+            state_updates["end_reason"] = "death"
 
     else:
         prompt = build_regular_story_prompt(
@@ -320,7 +351,20 @@ def step_generate_story(state: GameState) -> GameState:
             latest_user=q,
         )
     
-    story = story_chain.invoke({"full_prompt": prompt}).strip()
+    story = invoke_llm_with_retries(
+        story_chain.invoke,
+        {"full_prompt": prompt},
+        call_name="story generation",
+    ).strip()
+
+    if cmd == "combat":
+        state["player"].gold += gold_loot
+    elif cmd == "heal":
+        state["player"].hp = next_hp
+    elif cmd == "damage":
+        state["player"].hp = next_hp
+
+    state.update(state_updates)
 
     print("Story:", story, "\n")
 
@@ -328,13 +372,7 @@ def step_generate_story(state: GameState) -> GameState:
         "history": history + [f"You: {q}", f"Story: {story}"],
         "current_story": story,
         "story_steps": state["story_steps"] + 1,
-        "last_cmd": state["last_cmd"],
-        "should_end": state.get("should_end", False),
-        "end_reason": state.get("end_reason"),
-        "heal_amount": state.get("heal_amount", 0),
-        "actual_heal_amount": state.get("actual_heal_amount", 0),
-        "damage_amount": state.get("damage_amount", 0),
-        "actual_damage_amount": state.get("actual_damage_amount", 0),
+        **state_updates,
     }
 
 def step_evaluate_goals(state: GameState) -> GameState:
@@ -357,7 +395,11 @@ def step_evaluate_goals(state: GameState) -> GameState:
     )
 
     try:
-        result = goal_evaluator_chain.invoke({"full_prompt": prompt})
+        result = invoke_llm_with_retries(
+            goal_evaluator_chain.invoke,
+            {"full_prompt": prompt},
+            call_name="goal evaluation",
+        )
         completed_goals = completed_ongoing_goals(ongoing_goals, result.completed_goals)
     except Exception as e:
         print("ERROR GOAL EVALUATION:", e)
@@ -393,7 +435,11 @@ def step_generate_victory_wrapup(state: GameState) -> GameState:
         finished_goals=list(state.get("finished_goals") or []),
     )
 
-    story = story_chain.invoke({"full_prompt": prompt}).strip()
+    story = invoke_llm_with_retries(
+        story_chain.invoke,
+        {"full_prompt": prompt},
+        call_name="victory wrapup",
+    ).strip()
 
     return {
         "history": history + [f"Story: {story}"],

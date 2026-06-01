@@ -11,7 +11,8 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
-import sys, os
+import os
+import sys
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -128,3 +129,40 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
+
+
+def env_int(name, default):
+    return int(os.getenv(name, default))
+
+
+def env_float(name, default):
+    return float(os.getenv(name, default))
+
+
+def env_csv(name, default):
+    value = os.getenv(name, default)
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+LLM_REQUEST_TIMEOUT_SECONDS = env_float("LLM_REQUEST_TIMEOUT_SECONDS", "30")
+LLM_PROVIDER_MAX_RETRIES = env_int("LLM_PROVIDER_MAX_RETRIES", "0")
+LLM_RETRY_MAX_ATTEMPTS = env_int("LLM_RETRY_MAX_ATTEMPTS", "3")
+LLM_RETRY_INITIAL_DELAY_SECONDS = env_float("LLM_RETRY_INITIAL_DELAY_SECONDS", "0.5")
+LLM_RETRY_BACKOFF_MULTIPLIER = env_float("LLM_RETRY_BACKOFF_MULTIPLIER", "2")
+LLM_RETRY_MAX_DELAY_SECONDS = env_float("LLM_RETRY_MAX_DELAY_SECONDS", "4")
+LLM_RETRY_JITTER_SECONDS = env_float("LLM_RETRY_JITTER_SECONDS", "0.25")
+LLM_TRANSIENT_ERROR_KEYWORDS = env_csv(
+    "LLM_TRANSIENT_ERROR_KEYWORDS",
+    "timeout,timed out,rate limit,too many requests,temporarily unavailable,service unavailable,"
+    "connection error,connection reset,connection aborted,server error,internal server error,"
+    "bad gateway,gateway timeout,try again",
+)
+LLM_TRANSIENT_STATUS_CODES = [
+    int(status_code)
+    for status_code in env_csv("LLM_TRANSIENT_STATUS_CODES", "408,409,425,429,500,502,503,504")
+]
+LLM_SERVICE_UNAVAILABLE_STATUS_CODE = env_int("LLM_SERVICE_UNAVAILABLE_STATUS_CODE", "503")
+LLM_SERVICE_UNAVAILABLE_MESSAGE = os.getenv(
+    "LLM_SERVICE_UNAVAILABLE_MESSAGE",
+    "The storyteller is temporarily unavailable. Your adventure is safe; please try again in a moment.",
+)

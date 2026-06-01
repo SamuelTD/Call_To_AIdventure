@@ -14,9 +14,7 @@ from agents.game_master_graph import (
     build_post_input_graph,
     initialize_graph_runtime
 )
-from langchain.agents import create_agent
-from agents.game_master_graph import tools
-from agents.llm_runtime import llm
+from agents.llm_resilience import TemporaryLLMServiceError
 
 class GameEngine:
 
@@ -43,9 +41,15 @@ class GameEngine:
                 "mode": mode,
             }
 
-        state = self.post_graph.invoke(
-            input={**state, "latest_user": choice}
-        )
+        try:
+            state = self.post_graph.invoke(
+                input={**state, "latest_user": choice}
+            )
+        except TemporaryLLMServiceError:
+            return {
+                "state": state,
+                "mode": "service_unavailable",
+            }
 
         # combat trigger
         if state["last_cmd"] == "combat":
@@ -57,7 +61,13 @@ class GameEngine:
 
         # run pre graph again
         state["last_choices"] = state["current_choices"]
-        state = self.pre_graph.invoke(input=state)
+        try:
+            state = self.pre_graph.invoke(input=state)
+        except TemporaryLLMServiceError:
+            return {
+                "state": state,
+                "mode": "service_unavailable",
+            }
 
         return {
             "state": state,

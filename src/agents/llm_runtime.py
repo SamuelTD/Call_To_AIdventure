@@ -14,6 +14,7 @@ from agents.prompts import (
     CHOOSER_TEMPLATE,
     SUMMARY_TEMPLATE,
 )
+from agents.llm_resilience import get_llm_setting
 
 load_dotenv()
 
@@ -27,6 +28,8 @@ llm = ChatGroq(
     model=GROQ_MODEL,
     temperature=0.5,
     model_kwargs={"seed": seed},
+    timeout=float(get_llm_setting("LLM_REQUEST_TIMEOUT_SECONDS", "30")),
+    max_retries=int(get_llm_setting("LLM_PROVIDER_MAX_RETRIES", "0")),
 )
 
 base_story_template = ChatPromptTemplate.from_template("{full_prompt}")
