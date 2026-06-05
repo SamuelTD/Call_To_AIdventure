@@ -59,8 +59,8 @@ def make_adventure():
         description="A test adventure.",
         goals=["Retrieve the Emerald Sword."],
         monsters=[],
-        npcs=[],
-        locations=[],
+        characters={"active": [], "referenceable": []},
+        locations={"available": [], "start": None},
     )
 
 

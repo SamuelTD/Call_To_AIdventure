@@ -1,74 +1,122 @@
-from chunker import chunk_character_json_file, chunk_location_json_file
-from client import upsert_chunks
-from embedder import embed
-import os
+import argparse
+from collections.abc import Callable
+from pathlib import Path
 
-# ------------------ Helper Functions ------------------
-
-def get_folders(path: str):
-    """
-    Return a list of names of all subfolders in the given directory.
-    """
-    subfolders = [
-        name for name in os.listdir(path)
-        if os.path.isdir(os.path.join(path, name))
-    ]
-    print(f"[get_folders] Found {len(subfolders)} folders in '{path}': {subfolders}")
-    return subfolders
+from retrieval.chunker import chunk_character_json_file, chunk_location_json_file
+from retrieval.client import LORE_COLLECTION, reset_collection, upsert_lore_chunks
+from retrieval.embedder import embed
+from retrieval.schemas import LoreChunk
+from utils.pathing import project_path
 
 
-def get_files(path: str):
-    """
-    Return a list of file names in the given directory.
-    """
-    files = [
-        name for name in os.listdir(path)
-        if os.path.isfile(os.path.join(path, name))
-    ]
-    print(f"[get_files] Found {len(files)} files in '{path}': {files}")
-    return files
+DEFAULT_CHARACTER_DIR = project_path("data/world/characters")
+DEFAULT_LOCATION_DIR = project_path("data/world/locations")
 
-# ------------------ Configuration ------------------
 
-BASE_DIR = "data/world/"
-print(f"[ingest] Starting ingestion from base directory: {BASE_DIR}")
-FOLDERS = get_folders(BASE_DIR)
+def iter_json_files(path: Path) -> list[Path]:
+    if not path.exists():
+        raise FileNotFoundError(f"Directory does not exist: {path}")
+    return sorted(file for file in path.glob("*.json") if file.is_file())
 
-# ------------------ Ingestion Logic ------------------
 
-def ingest_folder(collection_name: str):
-    folder_path = os.path.join(BASE_DIR, collection_name)
-    files = get_files(folder_path)
-    print(f"[ingest_folder] Ingesting collection '{collection_name}' with {len(files)} files...")
+def build_chunks(
+    path: Path,
+    chunk_file: Callable[[Path], list[LoreChunk]],
+) -> list[LoreChunk]:
+    chunks: list[LoreChunk] = []
+    for file_path in iter_json_files(path):
+        file_chunks = chunk_file(file_path)
+        chunks.extend(file_chunks)
+        print(f"{file_path}: {len(file_chunks)} chunks")
+    return chunks
 
-    for file in files:
-        file_path = os.path.join(folder_path, file)
-        print(f"[ingest_folder] Processing file: {file_path}")
 
-        # 1) Chunk the file
-        match collection_name:
-            case "characters":
-                chunks = chunk_character_json_file(file_path)
-            case "locations":
-                chunks = chunk_location_json_file(file_path)
-      
-        print(f"[ingest_folder] chunk_json_file returned {len(chunks)} chunks for {file}")
+def embed_chunks(chunks: list[LoreChunk]) -> list[list[float]]:
+    embeddings: list[list[float]] = []
+    for index, chunk in enumerate(chunks, start=1):
+        print(f"Embedding {index}/{len(chunks)}: {chunk.id}")
+        embeddings.append(embed(chunk.text))
+    return embeddings
 
-        # 2) Embed each chunk
-        embeddings = []
-        for idx, chunk in enumerate(chunks):
-            print(f"[ingest_folder] Embedding chunk {idx} for '{file}' ({len(chunk['page_content'].split())} words)")
-            vec = embed(chunk["page_content"])
-            embeddings.append(vec)
-        print(f"[ingest_folder] Generated {len(embeddings)} embedding vectors")
 
-        # 3) Upsert into ChromaDB
-        upsert_chunks(collection_name, embeddings, chunks)
-        print(f"[ingest_folder] Upserted all chunks for '{file}' into collection '{collection_name}'\n")
+def ingest_chunks(
+    chunks: list[LoreChunk],
+    *,
+    collection_name: str,
+    dry_run: bool,
+) -> None:
+    if dry_run:
+        print(f"Dry run: would upsert {len(chunks)} chunks into {collection_name}")
+        return
 
-# ------------------ Main Script ------------------
+    embeddings = embed_chunks(chunks)
+    upsert_lore_chunks(chunks, embeddings, collection_name=collection_name)
+    print(f"Upserted {len(chunks)} chunks into {collection_name}")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Ingest character and location lore into the RAG store."
+    )
+    parser.add_argument(
+        "--characters",
+        action="store_true",
+        help="Ingest character sheets.",
+    )
+    parser.add_argument(
+        "--locations",
+        action="store_true",
+        help="Ingest location sheets.",
+    )
+    parser.add_argument(
+        "--character-dir",
+        type=Path,
+        default=DEFAULT_CHARACTER_DIR,
+        help="Directory containing character JSON files.",
+    )
+    parser.add_argument(
+        "--location-dir",
+        type=Path,
+        default=DEFAULT_LOCATION_DIR,
+        help="Directory containing location JSON files.",
+    )
+    parser.add_argument(
+        "--collection",
+        default=LORE_COLLECTION,
+        help="Chroma collection name.",
+    )
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Delete the target collection before ingesting.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate and chunk files without embedding or upserting.",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    ingest_characters = args.characters or not args.locations
+    ingest_locations = args.locations or not args.characters
+
+    chunks: list[LoreChunk] = []
+    if ingest_characters:
+        chunks.extend(build_chunks(args.character_dir, chunk_character_json_file))
+    if ingest_locations:
+        chunks.extend(build_chunks(args.location_dir, chunk_location_json_file))
+
+    print(f"Prepared {len(chunks)} total chunks")
+
+    if args.reset and not args.dry_run:
+        reset_collection(args.collection)
+        print(f"Reset collection {args.collection}")
+
+    ingest_chunks(chunks, collection_name=args.collection, dry_run=args.dry_run)
+
 
 if __name__ == "__main__":
-    for folder in FOLDERS:
-        ingest_folder(folder)
-    print(f"[ingest] Completed ingestion for all collections: {FOLDERS}")
+    main()

@@ -34,6 +34,8 @@ from agents.llm_runtime import (
     build_thinker_agent,
 )
 from agents.llm_resilience import invoke_llm_with_retries
+from retrieval.schemas import EntityType, RagContext
+from retrieval.service import build_retrieval_scope, retrieve_lore_context
 #endregion
 
 load_dotenv()
@@ -77,6 +79,7 @@ class GameState(TypedDict, total=False):
     finished_goals: list[str]
     adventure_completed: bool
     end_reason: str | None
+    current_location_id: str | None
 #endregion
 
 #region RUNTIME INIT
@@ -94,7 +97,39 @@ def prompt_fn(state: AgentState) -> list[SystemMessage | HumanMessage]:
 
 
 #region UTILS
-def make_choice(history: list[str], player_summary: str, previous_choices: list[str]) -> list[str]:
+def empty_rag_context() -> str:
+    return RagContext().format_for_prompt()
+
+
+def retrieve_rag_context(
+    state: GameState,
+    query: str,
+    entity_types: list[EntityType] | None = None,
+    top_k: int = 5,
+) -> str:
+    try:
+        scope = build_retrieval_scope(
+            state["adventure"],
+            current_location_id=state.get("current_location_id"),
+        )
+        context = retrieve_lore_context(
+            query,
+            scope,
+            entity_types=entity_types,
+            top_k=top_k,
+        )
+        return context.format_for_prompt()
+    except Exception as e:
+        print("ERROR RAG RETRIEVAL:", e)
+        return empty_rag_context()
+
+
+def make_choice(
+    history: list[str],
+    player_summary: str,
+    previous_choices: list[str],
+    rag_context: str,
+) -> list[str]:
     context = "\n".join(history)
     last_choices = " - ".join(previous_choices) if previous_choices else "None"
 
@@ -104,6 +139,7 @@ def make_choice(history: list[str], player_summary: str, previous_choices: list[
             "context": context,
             "player_summary": player_summary,
             "last_choices": last_choices,
+            "rag_context": rag_context,
         },
         call_name="choice generation",
     )
@@ -186,10 +222,19 @@ def step_get_input(state: GameState) -> GameState:
         }
 
     try:
+        rag_context = retrieve_rag_context(
+            state,
+            "\n".join([
+                state.get("current_story", ""),
+                "What can the player do next?",
+            ]),
+            top_k=4,
+        )
         choices = make_choice(
             state["history"],
             state["player"].get_summary(),
-            state.get("last_choices", [])
+            state.get("last_choices", []),
+            rag_context,
         )
     except Exception as e:
         print("ERROR:", e)
@@ -243,10 +288,20 @@ def step_agent_think(state: GameState) -> GameState:
     }
 
 def step_prepare_combat(state: GameState) -> GameState:
+    rag_context = retrieve_rag_context(
+        state,
+        "\n".join([
+            state.get("current_story", ""),
+            state.get("latest_user", ""),
+            state.get("current_monster_name") or "",
+        ]),
+        top_k=3,
+    )
     prompt = build_pre_combat_fluff_prompt(
         state["current_story"],
         state["latest_user"],
         state["current_monster_name"],
+        rag_context,
     )
     fluff = invoke_llm_with_retries(
         story_chain.invoke,
@@ -262,6 +317,11 @@ def step_generate_story(state: GameState) -> GameState:
     chat_hist = "\n".join(history)
     q = state["latest_user"]
     cmd = state["last_cmd"]
+    rag_context = retrieve_rag_context(
+        state,
+        "\n".join([state.get("current_story", ""), q]),
+        top_k=5,
+    )
     state_updates = {
         "last_cmd": state["last_cmd"],
         "should_end": state.get("should_end", False),
@@ -282,6 +342,7 @@ def step_generate_story(state: GameState) -> GameState:
             enemy=enemy,
             gold_loot=gold_loot,
             item_loot=item_loot,
+            rag_context=rag_context,
         )
 
         state_updates.update({
@@ -309,6 +370,7 @@ def step_generate_story(state: GameState) -> GameState:
             actual_heal_amount=actual_heal_amount,
             current_hp=next_hp,
             max_hp=state["player"].max_hp,
+            rag_context=rag_context,
         )
 
         state_updates.update({
@@ -333,6 +395,7 @@ def step_generate_story(state: GameState) -> GameState:
             current_hp=next_hp,
             max_hp=state["player"].max_hp,
             player_has_died=player_has_died,
+            rag_context=rag_context,
         )
 
         state_updates.update({
@@ -349,6 +412,7 @@ def step_generate_story(state: GameState) -> GameState:
             player_summary=player_summary,
             chat_history=chat_hist,
             latest_user=q,
+            rag_context=rag_context,
         )
     
     story = invoke_llm_with_retries(

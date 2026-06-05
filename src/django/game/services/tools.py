@@ -117,6 +117,7 @@ def initialize_game(adventure_id: str, player: Player):
         "finished_goals": [],
         "adventure_completed": False,
         "end_reason": None,
+        "current_location_id": adventure.locations.start,
         "heal_amount": 0,
         "actual_heal_amount": 0,
         "damage_amount": 0,

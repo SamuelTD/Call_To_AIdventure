@@ -10,12 +10,14 @@
     "Giant Spider",
     "Ghoul"
   ],
-  "npcs": [
-    
-  ],
-  "locations": [
-    
-  ],
+  "characters": {
+    "active": [],
+    "referenceable": []
+  },
+  "locations": {
+    "available": [],
+    "start": null
+  },
   "items": [
     
   ],

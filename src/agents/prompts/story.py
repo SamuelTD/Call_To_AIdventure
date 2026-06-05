@@ -1,4 +1,21 @@
-def build_pre_combat_fluff_prompt(current_story: str, latest_user: str, monster_name: str) -> str:
+def build_lore_section(rag_context: str) -> str:
+    return f"""
+Relevant world lore:
+{rag_context}
+
+Lore rules:
+- Use retrieved lore only when it is relevant to the current scene.
+- Do not introduce characters or locations outside the current adventure scope.
+- Current game state and resolved narrative override retrieved lore.
+""".strip()
+
+
+def build_pre_combat_fluff_prompt(
+    current_story: str,
+    latest_user: str,
+    monster_name: str,
+    rag_context: str,
+) -> str:
     return f"""
 You are a game master for a fantasy role playing game. Your role is to write short (2-3 sentences maximum)
 descriptive scenes that will precede a combat.
@@ -7,6 +24,8 @@ You base your narration on the following context and player input.
 Context: {current_story}
 Player input: {latest_user}
 The enemy the player is about to combat is {monster_name}.
+
+{build_lore_section(rag_context)}
 """.strip()
 
 
@@ -16,6 +35,7 @@ def build_post_combat_story_prompt(
     enemy: str,
     gold_loot: int,
     item_loot,
+    rag_context: str,
 ) -> str:
     return f"""
 Here are the informations on the user :
@@ -23,6 +43,8 @@ Here are the informations on the user :
 
 Here is the adventure so far:
 {chat_history}
+
+{build_lore_section(rag_context)}
 
 You are the Game Master for a narrative adventure game. You continue the story
 based on the events so far. You use a refined, fantasy inspired tone to craft the story.
@@ -43,6 +65,7 @@ def build_post_heal_story_prompt(
     actual_heal_amount: int,
     current_hp: int,
     max_hp: int,
+    rag_context: str,
 ) -> str:
     return f"""
 Here are the informations on the user :
@@ -50,6 +73,8 @@ Here are the informations on the user :
 
 Here is the adventure so far:
 {chat_history}
+
+{build_lore_section(rag_context)}
 
 You are the Game Master for a narrative adventure game. You continue the story
 based on the events so far and the user input. You use a refined, fantasy inspired tone to craft the story.
@@ -72,6 +97,7 @@ def build_post_damage_story_prompt(
     current_hp: int,
     max_hp: int,
     player_has_died: bool,
+    rag_context: str,
 ) -> str:
     death_instruction = (
         "The damage reduced the player to 0 HP. Make this a clear death or collapse scene, but do not offer choices or continue beyond the moment."
@@ -85,6 +111,8 @@ Here are the informations on the user :
 
 Here is the adventure so far:
 {chat_history}
+
+{build_lore_section(rag_context)}
 
 You are the Game Master for a narrative adventure game. You continue the story
 based on the events so far and the user input. You use a refined, fantasy inspired tone to craft the story.
@@ -104,6 +132,7 @@ def build_regular_story_prompt(
     player_summary: str,
     chat_history: str,
     latest_user: str,
+    rag_context: str,
 ) -> str:
     return f"""
 Here are the informations on the user :
@@ -111,6 +140,8 @@ Here are the informations on the user :
 
 Here is the adventure so far:
 {chat_history}
+
+{build_lore_section(rag_context)}
 
 You are the Game Master for a narrative adventure game. You take the user input and continue the story
 based on the events so far and the user input. You use a refined, fantasy inspired tone to craft the story.
