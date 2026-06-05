@@ -78,6 +78,7 @@
                 justify-content: flex-start;
                 margin-top: 12px;
             }
+
         }
 
         label {
@@ -137,6 +138,7 @@
         .error {
             color: #ff7b7b;
         }
+
 
         .section-title {
             margin: 24px 0 12px;
@@ -291,7 +293,7 @@
 
     <script>
         const API_ADVENTURES_URL = "{% url 'api_adventures' %}";
-        const API_START_URL = "{% url 'api_start' %}";
+        const CHARACTER_CREATE_URL = "{% url 'character_create' %}";
         const IS_AUTHENTICATED = {{ user.is_authenticated|yesno:"true,false" }};
         const API_SAVES_URL = "{% url 'api_saves' %}";
         const API_SAVE_LOAD_TEMPLATE = "{% url 'api_save_load' 0 %}";
@@ -313,7 +315,6 @@
         const historySavesPanel = document.getElementById("history-saves-panel");
 
         let adventures = [];
-
         function saveUrl(template, id) {
             return template.replace("/0/", `/${id}/`);
         }
@@ -515,38 +516,11 @@
             startBtn.classList.remove("hidden");
         });
 
-        startBtn.addEventListener("click", async () => {
+        startBtn.addEventListener("click", () => {
             const selectedId = adventureSelect.value;
-
             if (!selectedId) return;
 
-            startBtn.disabled = true;
-            statusBox.textContent = "Starting adventure...";
-
-            try {
-                const response = await fetch(API_START_URL, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        adventure_id: selectedId
-                    })
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.error || "Failed to start adventure");
-                }
-
-                window.location.href = "/play/";
-            } catch (err) {
-                console.error(err);
-                statusBox.textContent = err.message;
-                statusBox.classList.add("error");
-                startBtn.disabled = false;
-            }
+            window.location.href = `${CHARACTER_CREATE_URL}?adventure_id=${encodeURIComponent(selectedId)}`;
         });
 
         if (activeSavesTab && newAdventureTab && historySavesTab) {

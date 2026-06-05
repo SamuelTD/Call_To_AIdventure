@@ -5,7 +5,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from django.urls import reverse
 
-from game.models import SaveGame
+from game.models import CharacterTemplate, SaveGame
 from game.services.game_engine import GameEngine
 from game.services.tools import ensure_goal_state, make_serializable_state
 from agents.game_master_graph import (
@@ -62,6 +62,15 @@ def make_adventure():
         npcs=[],
         locations=[],
     )
+
+
+def make_character_payload():
+    return {
+        "name": "Stan",
+        "race": "Human",
+        "class": CharacterClass.FIGHTER.value,
+        "gender": "Male",
+    }
 
 
 def make_game_state():
@@ -195,6 +204,236 @@ class AccountFlowTests(TestCase):
         self.assertNotContains(response, "loaded_player")
 
 
+class CharacterTemplateTests(TestCase):
+    def test_guest_cannot_save_character_template(self):
+        response = self.client.post(
+            reverse("api_character_template_save"),
+            {"character": make_character_payload()},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertFalse(CharacterTemplate.objects.exclude(user_id=-1).exists())
+
+    def test_logged_in_user_can_save_character_template(self):
+        user = User.objects.create_user(
+            username="template_saver",
+            password="LongEnoughPassword42",
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("api_character_template_save"),
+            {"character": make_character_payload()},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["created"])
+        template = CharacterTemplate.objects.get(user=user)
+        self.assertEqual(template.name, "Stan")
+        self.assertEqual(template.race, "Human")
+        self.assertEqual(template.character_class, CharacterClass.FIGHTER.value)
+        self.assertEqual(template.gender, "Male")
+
+    def test_saving_same_template_name_updates_existing_template(self):
+        user = User.objects.create_user(
+            username="template_updater",
+            password="LongEnoughPassword42",
+        )
+        self.client.force_login(user)
+
+        first_response = self.client.post(
+            reverse("api_character_template_save"),
+            {"character": make_character_payload()},
+            content_type="application/json",
+        )
+        second_payload = {
+            **make_character_payload(),
+            "race": "Elf",
+            "class": CharacterClass.WIZARD.value,
+            "gender": "Female",
+        }
+        second_response = self.client.post(
+            reverse("api_character_template_save"),
+            {"character": second_payload},
+            content_type="application/json",
+        )
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertFalse(second_response.json()["created"])
+        self.assertEqual(CharacterTemplate.objects.filter(user=user).count(), 1)
+        template = CharacterTemplate.objects.get(user=user, name="Stan")
+        self.assertEqual(template.race, "Elf")
+        self.assertEqual(template.character_class, CharacterClass.WIZARD.value)
+        self.assertEqual(template.gender, "Female")
+
+    def test_saving_identical_template_is_noop(self):
+        user = User.objects.create_user(
+            username="template_duplicate",
+            password="LongEnoughPassword42",
+        )
+        self.client.force_login(user)
+
+        first_response = self.client.post(
+            reverse("api_character_template_save"),
+            {"character": make_character_payload()},
+            content_type="application/json",
+        )
+        template = CharacterTemplate.objects.get(user=user)
+        updated_at = template.updated_at
+        second_response = self.client.post(
+            reverse("api_character_template_save"),
+            {"character": make_character_payload()},
+            content_type="application/json",
+        )
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 200)
+        self.assertFalse(second_response.json()["created"])
+        self.assertTrue(second_response.json()["skipped"])
+        self.assertEqual(CharacterTemplate.objects.filter(user=user).count(), 1)
+        template.refresh_from_db()
+        self.assertEqual(template.updated_at, updated_at)
+
+    def test_template_save_rejects_invalid_character(self):
+        user = User.objects.create_user(
+            username="template_validator",
+            password="LongEnoughPassword42",
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            reverse("api_character_template_save"),
+            {
+                "character": {
+                    **make_character_payload(),
+                    "name": "",
+                }
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(CharacterTemplate.objects.filter(user=user).exists())
+
+    def test_template_list_includes_generic_templates_for_guests(self):
+        response = self.client.get(reverse("api_character_templates"))
+
+        self.assertEqual(response.status_code, 200)
+        templates = response.json()["templates"]
+        generic_templates = [template for template in templates if template["is_generic"]]
+        self.assertEqual(len(generic_templates), 3)
+        self.assertEqual(
+            {
+                (template["name"], template["race"], template["class"], template["gender"])
+                for template in generic_templates
+            },
+            {
+                ("Borin Stoneguard", "Dwarf", CharacterClass.FIGHTER.value, "Male"),
+                ("Mira Quickstep", "Human", CharacterClass.ROGUE.value, "Female"),
+                ("Elara Moonveil", "Elf", CharacterClass.WIZARD.value, "Female"),
+            },
+        )
+
+    def test_template_list_includes_user_templates_for_logged_in_user(self):
+        user = User.objects.create_user(
+            username="template_lister",
+            password="LongEnoughPassword42",
+        )
+        other_user = User.objects.create_user(
+            username="other_template_lister",
+            password="LongEnoughPassword42",
+        )
+        CharacterTemplate.objects.create(
+            user=user,
+            name="My Fighter",
+            race="Human",
+            character_class=CharacterClass.FIGHTER.value,
+            gender="Male",
+        )
+        CharacterTemplate.objects.create(
+            user=other_user,
+            name="Other Rogue",
+            race="Human",
+            character_class=CharacterClass.ROGUE.value,
+            gender="Female",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("api_character_templates"))
+
+        self.assertEqual(response.status_code, 200)
+        templates = response.json()["templates"]
+        self.assertIn("My Fighter", [template["name"] for template in templates])
+        self.assertNotIn("Other Rogue", [template["name"] for template in templates])
+        self.assertEqual(len([template for template in templates if template["is_generic"]]), 3)
+
+    def test_logged_in_user_can_delete_own_template(self):
+        user = User.objects.create_user(
+            username="template_deleter",
+            password="LongEnoughPassword42",
+        )
+        template = CharacterTemplate.objects.create(
+            user=user,
+            name="Delete Me",
+            race="Human",
+            character_class=CharacterClass.ROGUE.value,
+            gender="Female",
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(reverse("api_character_template_delete", args=[template.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(CharacterTemplate.objects.filter(id=template.id).exists())
+
+    def test_guest_cannot_delete_template(self):
+        generic_template = CharacterTemplate.objects.filter(user_id=-1).first()
+
+        response = self.client.post(reverse("api_character_template_delete", args=[generic_template.id]))
+
+        self.assertEqual(response.status_code, 401)
+        self.assertTrue(CharacterTemplate.objects.filter(id=generic_template.id).exists())
+
+    def test_user_cannot_delete_generic_template(self):
+        user = User.objects.create_user(
+            username="generic_delete_blocked",
+            password="LongEnoughPassword42",
+        )
+        generic_template = CharacterTemplate.objects.filter(user_id=-1).first()
+        self.client.force_login(user)
+
+        response = self.client.post(reverse("api_character_template_delete", args=[generic_template.id]))
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(CharacterTemplate.objects.filter(id=generic_template.id).exists())
+
+    def test_user_cannot_delete_another_users_template(self):
+        owner = User.objects.create_user(
+            username="template_owner",
+            password="LongEnoughPassword42",
+        )
+        other = User.objects.create_user(
+            username="template_intruder",
+            password="LongEnoughPassword42",
+        )
+        template = CharacterTemplate.objects.create(
+            user=owner,
+            name="Private Template",
+            race="Elf",
+            character_class=CharacterClass.WIZARD.value,
+            gender="Female",
+        )
+        self.client.force_login(other)
+
+        response = self.client.post(reverse("api_character_template_delete", args=[template.id]))
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(CharacterTemplate.objects.filter(id=template.id).exists())
+
+
 class SaveGamePersistenceTests(TestCase):
     def test_goal_state_backfill_uses_unfinished_adventure_goals(self):
         state = {
@@ -245,7 +484,10 @@ class SaveGamePersistenceTests(TestCase):
 
         response = self.client.post(
             reverse("api_start"),
-            {"adventure_id": adventure.id},
+            {
+                "adventure_id": adventure.id,
+                "character": make_character_payload(),
+            },
             content_type="application/json",
         )
 
@@ -276,7 +518,10 @@ class SaveGamePersistenceTests(TestCase):
 
             response = self.client.post(
                 reverse("api_start"),
-                {"adventure_id": adventure.id},
+                {
+                    "adventure_id": adventure.id,
+                    "character": make_character_payload(),
+                },
                 content_type="application/json",
             )
 

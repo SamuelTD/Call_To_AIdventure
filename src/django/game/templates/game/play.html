@@ -181,6 +181,7 @@
                     <div class="sheet-line"><strong>Name:</strong> <span id="player-name"></span></div>
                     <div class="sheet-line"><strong>Class:</strong> <span id="player-class"></span></div>
                     <div class="sheet-line"><strong>Race:</strong> <span id="player-race"></span></div>
+                    <div class="sheet-line"><strong>Gender:</strong> <span id="player-gender"></span></div>
                 </div>
 
                 <div class="sheet-block">
@@ -220,6 +221,7 @@
         const playerName = document.getElementById("player-name");
         const playerClass = document.getElementById("player-class");
         const playerRace = document.getElementById("player-race");
+        const playerGender = document.getElementById("player-gender");
         const playerGold = document.getElementById("player-gold");
         const playerHp = document.getElementById("player-hp");
         const playerWeapon = document.getElementById("player-weapon");
@@ -253,6 +255,7 @@
             playerName.textContent = player.name || "";
             playerClass.textContent = player.class || "";
             playerRace.textContent = player.race || "";
+            playerGender.textContent = player.gender || "";
             playerGold.textContent = player.gold ?? "";
             playerHp.textContent = `${player.hp ?? ""}/${player.max_hp ?? ""}`;
             playerWeapon.textContent = player.weapon || "";

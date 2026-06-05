@@ -9,9 +9,10 @@ from django.contrib.auth import login
 from django.contrib.auth.forms import UserCreationForm
 from utils.adventure import load_adv_outro, load_all_adventures
 
-from game.models import SaveGame
+from game.models import CharacterTemplate, SaveGame
 from game.services.tools import initialize_game, persist_game, rebuild_state
 from game.services.game_engine import get_engine
+from utils.player import create_player, get_character_creation_options
 
 from uuid import uuid4
 import json
@@ -19,6 +20,7 @@ from pathlib import Path
 
 # region HELPERS
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+SYSTEM_TEMPLATE_USER_ID = -1
 
 def build_character_sheet(player):
     inv = player.inventory if player.inventory else []
@@ -28,6 +30,7 @@ def build_character_sheet(player):
         "name": player.name,
         "class": player.p_class.value,
         "race": player.race,
+        "gender": player.gender,
         "gold": player.gold,
         "hp": player.hp,
         "max_hp": player.max_hp,
@@ -84,6 +87,16 @@ def build_save_game_payload(save_game):
         "created_at": save_game.created_at.isoformat(),
     }
 
+def build_character_template_payload(template):
+    return {
+        "id": template.id,
+        "name": template.name,
+        "race": template.race,
+        "class": template.character_class,
+        "gender": template.gender,
+        "is_generic": template.user_id == SYSTEM_TEMPLATE_USER_ID,
+    }
+
 # region VIEWS
 class HealthView(View):
     def get(self, request):
@@ -124,8 +137,19 @@ class StartGameView(View):
         if not adventure_id:
             return JsonResponse({"error": "Missing adventure_id"}, status=400)
 
+        character = body.get("character") or {}
         try:
-            state, intro, adventure = initialize_game(adventure_id)
+            player = create_player(
+                name=character.get("name", ""),
+                race=character.get("race", ""),
+                p_class=character.get("class", ""),
+                gender=character.get("gender", ""),
+            )
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+
+        try:
+            state, intro, adventure = initialize_game(adventure_id, player)
         except StopIteration:
             return JsonResponse({"error": "Unknown adventure_id"}, status=404)
 
@@ -330,6 +354,21 @@ class VictoryPageView(TemplateView):
 class LandingPageView(TemplateView):
     template_name = "game/landing.html"
 
+class CharacterCreatePageView(TemplateView):
+    template_name = "game/character_create.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        adventure_id = self.request.GET.get("adventure_id", "")
+        adventure = next(
+            (adv for adv in load_all_adventures() if adv.id == adventure_id),
+            None,
+        )
+
+        context["adventure_id"] = adventure_id
+        context["adventure"] = adventure
+        return context
+
 class SignupView(View):
     template_name = "registration/signup.html"
 
@@ -366,6 +405,109 @@ class AdventureListView(View):
         ]
 
         return JsonResponse({"adventures": data})
+
+class CharacterCreationOptionsView(View):
+    def get(self, request):
+        return JsonResponse(get_character_creation_options())
+
+class CharacterTemplateListView(View):
+    def get(self, request):
+        user_ids = [SYSTEM_TEMPLATE_USER_ID]
+        if request.user.is_authenticated:
+            user_ids.append(request.user.id)
+
+        templates = CharacterTemplate.objects.filter(user_id__in=user_ids).order_by(
+            "user_id",
+            "name",
+        )
+
+        return JsonResponse({
+            "templates": [
+                build_character_template_payload(template)
+                for template in templates
+            ],
+        })
+
+@method_decorator(csrf_exempt, name="dispatch")
+class CharacterTemplateSaveView(View):
+    def post(self, request):
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Login required"}, status=401)
+
+        try:
+            body = json.loads(request.body.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            return HttpResponseBadRequest("Invalid JSON")
+
+        character = body.get("character") or {}
+        try:
+            player = create_player(
+                name=character.get("name", ""),
+                race=character.get("race", ""),
+                p_class=character.get("class", ""),
+                gender=character.get("gender", ""),
+            )
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+
+        duplicate_template = CharacterTemplate.objects.filter(
+            user=request.user,
+            name=player.name,
+            race=player.race,
+            character_class=player.p_class.value,
+            gender=player.gender,
+        ).first()
+
+        if duplicate_template is not None:
+            return JsonResponse({
+                "created": False,
+                "skipped": True,
+                "template": {
+                    "id": duplicate_template.id,
+                    "name": duplicate_template.name,
+                    "race": duplicate_template.race,
+                    "class": duplicate_template.character_class,
+                    "gender": duplicate_template.gender,
+                },
+            })
+
+        template, created = CharacterTemplate.objects.update_or_create(
+            user=request.user,
+            name=player.name,
+            defaults={
+                "race": player.race,
+                "character_class": player.p_class.value,
+                "gender": player.gender,
+            },
+        )
+
+        return JsonResponse({
+            "created": created,
+            "skipped": False,
+            "template": {
+                "id": template.id,
+                "name": template.name,
+                "race": template.race,
+                "class": template.character_class,
+                "gender": template.gender,
+            },
+        })
+
+@method_decorator(csrf_exempt, name="dispatch")
+class CharacterTemplateDeleteView(View):
+    def post(self, request, template_id):
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Login required"}, status=401)
+
+        deleted_count, _ = CharacterTemplate.objects.filter(
+            id=template_id,
+            user=request.user,
+        ).delete()
+
+        if not deleted_count:
+            raise Http404("Character template not found")
+
+        return JsonResponse({"ok": True})
 
 class SaveGameListView(View):
     def get(self, request):

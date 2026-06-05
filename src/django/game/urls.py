@@ -3,18 +3,25 @@ from .views import (
     HealthView, PlayView, StartGameView, 
     DebugPageView, StepGameView, StartCombatView, 
     CombatActionView, AdventureListView, LandingPageView,
-    PlayPageView, CurrentGameStateView, CombatPageView,
+    PlayPageView, CharacterCreatePageView, CurrentGameStateView, CombatPageView,
     CombatStateView, GameOverPageView, SignupView,
     SaveGameListView, LoadSaveGameView, DeleteSaveGameView,
-    VictoryPageView)
+    VictoryPageView, CharacterCreationOptionsView,
+    CharacterTemplateListView, CharacterTemplateSaveView,
+    CharacterTemplateDeleteView)
 
 urlpatterns = [
     path("", LandingPageView.as_view(), name="landing"),
     path("accounts/signup/", SignupView.as_view(), name="signup"),
+    path("character/create/", CharacterCreatePageView.as_view(), name="character_create"),
     path("play/", PlayPageView.as_view(), name="play"),
     path("health", HealthView.as_view(), name="health"),
     path("debug", DebugPageView.as_view(), name="debug"),
     path("api/adventures/", AdventureListView.as_view(), name="api_adventures"),
+    path("api/character-options/", CharacterCreationOptionsView.as_view(), name="api_character_options"),
+    path("api/character-templates/", CharacterTemplateListView.as_view(), name="api_character_templates"),
+    path("api/character-templates/save", CharacterTemplateSaveView.as_view(), name="api_character_template_save"),
+    path("api/character-templates/<int:template_id>/delete", CharacterTemplateDeleteView.as_view(), name="api_character_template_delete"),
     path("api/saves/", SaveGameListView.as_view(), name="api_saves"),
     path("api/saves/<int:save_game_id>/load", LoadSaveGameView.as_view(), name="api_save_load"),
     path("api/saves/<int:save_game_id>/delete", DeleteSaveGameView.as_view(), name="api_save_delete"),

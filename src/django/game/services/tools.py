@@ -1,6 +1,6 @@
 from game.models import SaveGame
 from django.utils import timezone
-from utils.player import Player, load_player
+from utils.player import Player
 from utils.adventure import Adventure, load_all_adventures, load_adv_intro
 from utils.monster import Monster
 
@@ -96,11 +96,10 @@ def persist_game(
     request.session.modified = True
     return serializable_state, save
 
-def initialize_game(adventure_id: str):
+def initialize_game(adventure_id: str, player: Player):
     adventures = load_all_adventures()
     adventure = next(a for a in adventures if a.id == adventure_id)
     intro = load_adv_intro(adventure_id)
-    player = load_player()
 
     state = {
         "player": player,
