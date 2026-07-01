@@ -12,7 +12,8 @@ from agents.game_master_graph import (
     GameState,
     build_pre_input_graph,
     build_post_input_graph,
-    initialize_graph_runtime
+    initialize_graph_runtime,
+    describe_current_room,
 )
 from agents.llm_resilience import TemporaryLLMServiceError
 
@@ -74,6 +75,23 @@ class GameEngine:
             "mode": "story",
             "story": state["current_story"],
             "choices": state["current_choices"],
+        }
+
+    def check_current_room(self, state):
+        try:
+            room_description = describe_current_room(state)
+        except TemporaryLLMServiceError:
+            return {
+                "state": state,
+                "mode": "service_unavailable",
+            }
+
+        state["current_story"] = room_description
+        return {
+            "state": state,
+            "mode": "story",
+            "story": room_description,
+            "choices": state.get("current_choices", []),
         }
     
     def start_combat(self, state):

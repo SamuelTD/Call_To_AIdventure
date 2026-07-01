@@ -182,6 +182,17 @@ def location_connections_text(location: LocationLore) -> str:
     ])
 
 
+def location_completion_text(location: LocationLore) -> str:
+    return join_lines([
+        f"Objective: {location.completion.objective}"
+        if location.completion.objective
+        else None,
+        "Signals: " + "; ".join(location.completion.signals)
+        if location.completion.signals
+        else None,
+    ])
+
+
 def chunk_location(location: LocationLore, source_path: str) -> list[LoreChunk]:
     candidates: list[tuple[ChunkKind, str]] = [
         ("overview", location_overview_text(location)),
@@ -190,6 +201,7 @@ def chunk_location(location: LocationLore, source_path: str) -> list[LoreChunk]:
         ("connections", location_connections_text(location)),
         ("clues", join_lines(location.clues)),
         ("loot", join_lines(location.loot)),
+        ("completion", location_completion_text(location)),
     ]
 
     return [

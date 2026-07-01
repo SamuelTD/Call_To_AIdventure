@@ -153,6 +153,100 @@ User input: {latest_user}
 """.strip()
 
 
+def build_current_room_prompt(
+    player_summary: str,
+    current_story: str,
+    rag_context: str,
+) -> str:
+    return f"""
+Here are the informations on the user:
+{player_summary}
+
+Current story text:
+{current_story}
+
+{build_lore_section(rag_context)}
+
+You are the Game Master for a narrative adventure game.
+Write a fresh description of the player's current room.
+This is a debug room check, not a new story turn.
+Use the retrieved room lore as the main source of truth.
+Do not advance time, trigger combat, complete goals, grant loot, move the player, or offer choices.
+Write in the second person with a refined fantasy tone.
+Limit the description to four sentences maximum.
+""".strip()
+
+
+def build_room_completion_prompt(
+    player_summary: str,
+    current_location_id: str,
+    room_objective: str,
+    room_signals: list[str],
+    chat_history: str,
+    latest_user: str,
+    current_story: str,
+) -> str:
+    signals = "\n".join(f"- {signal}" for signal in room_signals) or "- None"
+
+    return f"""
+You evaluate room completion for a linear narrative dungeon.
+Only decide whether the current room objective has been completed by the latest resolved narrative.
+Do not mark the room complete from player intent alone, vague foreshadowing, or future plans.
+The room is complete only if the latest story clearly resolves the objective or matches one of the completion signals.
+
+Player:
+{player_summary}
+
+Current room id:
+{current_location_id}
+
+Room objective:
+{room_objective}
+
+Completion signals:
+{signals}
+
+Recent adventure context:
+{chat_history}
+
+Latest player choice:
+{latest_user}
+
+Latest resolved narrative:
+{current_story}
+""".strip()
+
+
+def build_room_arrival_prompt(
+    player_summary: str,
+    previous_story: str,
+    previous_location_id: str,
+    next_location_id: str,
+    rag_context: str,
+) -> str:
+    return f"""
+Here are the informations on the user:
+{player_summary}
+
+The player has finished room:
+{previous_location_id}
+
+Previous resolved narrative:
+{previous_story}
+
+The player now enters room:
+{next_location_id}
+
+{build_lore_section(rag_context)}
+
+You are the Game Master for a linear dungeon adventure.
+Write a short arrival description for the new room using the retrieved room lore as the main source of truth.
+Do not offer choices, trigger combat, grant loot, complete goals, or move beyond this room.
+Write in the second person with a refined fantasy tone.
+Limit the arrival to four sentences maximum.
+""".strip()
+
+
 def build_goal_evaluation_prompt(
     player_summary: str,
     chat_history: str,

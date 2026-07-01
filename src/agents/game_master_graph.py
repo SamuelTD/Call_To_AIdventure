@@ -22,6 +22,9 @@ from agents.prompts import (
     build_post_heal_story_prompt,
     build_post_damage_story_prompt,
     build_regular_story_prompt,
+    build_current_room_prompt,
+    build_room_completion_prompt,
+    build_room_arrival_prompt,
     build_goal_evaluation_prompt,
     build_victory_wrapup_prompt,
 )
@@ -31,11 +34,14 @@ from agents.llm_runtime import (
     summary_chain,
     choicer_chain,
     goal_evaluator_chain,
+    room_completion_chain,
     build_thinker_agent,
 )
 from agents.llm_resilience import invoke_llm_with_retries
 from retrieval.schemas import EntityType, RagContext
 from retrieval.service import build_retrieval_scope, retrieve_lore_context
+from retrieval.chunker import load_location
+from utils.pathing import project_path
 #endregion
 
 load_dotenv()
@@ -80,6 +86,8 @@ class GameState(TypedDict, total=False):
     adventure_completed: bool
     end_reason: str | None
     current_location_id: str | None
+    completed_location_ids: list[str]
+    location_index: int
 #endregion
 
 #region RUNTIME INIT
@@ -107,6 +115,9 @@ def retrieve_rag_context(
     entity_types: list[EntityType] | None = None,
     top_k: int = 5,
 ) -> str:
+    if not state.get("adventure"):
+        return empty_rag_context()
+
     try:
         scope = build_retrieval_scope(
             state["adventure"],
@@ -205,6 +216,48 @@ def normalize_damage_amount(amount) -> int:
 def completed_ongoing_goals(ongoing_goals: list[str], completed_goals: list[str]) -> list[str]:
     ongoing_set = set(ongoing_goals)
     return [goal for goal in completed_goals if goal in ongoing_set]
+
+
+def location_order(state: GameState) -> list[str]:
+    adventure = state.get("adventure")
+    if not adventure:
+        return []
+    return list(adventure.locations.available)
+
+
+def current_location_index(state: GameState) -> int | None:
+    order = location_order(state)
+    if not order:
+        return None
+
+    location_id = state.get("current_location_id")
+    if location_id in order:
+        return order.index(location_id)
+
+    index = state.get("location_index")
+    if isinstance(index, int) and 0 <= index < len(order):
+        return index
+
+    return None
+
+
+def load_location_by_id(location_id: str):
+    path = project_path(f"data/world/locations/{location_id}.json")
+    if not path.exists():
+        return None
+    return load_location(path)
+
+
+def next_location_id(state: GameState) -> str | None:
+    order = location_order(state)
+    index = current_location_index(state)
+    if index is None:
+        return None
+
+    next_index = index + 1
+    if next_index >= len(order):
+        return None
+    return order[next_index]
 #endregion
 
 
@@ -310,6 +363,114 @@ def step_prepare_combat(state: GameState) -> GameState:
     ).strip()
 
     return {"combat_fluff": fluff}
+
+
+def describe_current_room(state: GameState) -> str:
+    rag_context = retrieve_rag_context(
+        state,
+        "\n".join([
+            state.get("current_story", ""),
+            state.get("current_location_id") or "",
+            "Describe the current room.",
+        ]),
+        entity_types=["location"],
+        top_k=5,
+    )
+    prompt = build_current_room_prompt(
+        player_summary=state["player"].get_summary(),
+        current_story=state.get("current_story", ""),
+        rag_context=rag_context,
+    )
+    return invoke_llm_with_retries(
+        story_chain.invoke,
+        {"full_prompt": prompt},
+        call_name="current room description",
+    ).strip()
+
+
+def step_evaluate_room_progression(state: GameState) -> GameState:
+    if state.get("should_end"):
+        return {}
+
+    location_id = state.get("current_location_id")
+    if not location_id:
+        return {}
+
+    location = load_location_by_id(location_id)
+    if not location or not location.completion.objective:
+        return {}
+
+    history = compress_history(state.get("history", []))
+    prompt = build_room_completion_prompt(
+        player_summary=state["player"].get_summary(),
+        current_location_id=location_id,
+        room_objective=location.completion.objective,
+        room_signals=location.completion.signals,
+        chat_history="\n".join(history),
+        latest_user=state.get("latest_user", ""),
+        current_story=state.get("current_story", ""),
+    )
+
+    try:
+        result = invoke_llm_with_retries(
+            room_completion_chain.invoke,
+            {"full_prompt": prompt},
+            call_name="room completion evaluation",
+        )
+    except Exception as e:
+        print("ERROR ROOM EVALUATION:", e)
+        return {}
+
+    if not result.room_completed:
+        return {}
+
+    completed_location_ids = list(state.get("completed_location_ids") or [])
+    if location_id not in completed_location_ids:
+        completed_location_ids.append(location_id)
+
+    next_id = next_location_id(state)
+    if next_id is None:
+        return {
+            "completed_location_ids": completed_location_ids,
+        }
+
+    next_index = location_order(state).index(next_id)
+    transition_state = {
+        **state,
+        "current_location_id": next_id,
+        "location_index": next_index,
+    }
+    rag_context = retrieve_rag_context(
+        transition_state,
+        "\n".join([
+            state.get("current_story", ""),
+            next_id,
+            "Describe the room the player enters next.",
+        ]),
+        entity_types=["location"],
+        top_k=5,
+    )
+    arrival_prompt = build_room_arrival_prompt(
+        player_summary=state["player"].get_summary(),
+        previous_story=state.get("current_story", ""),
+        previous_location_id=location_id,
+        next_location_id=next_id,
+        rag_context=rag_context,
+    )
+    arrival_story = invoke_llm_with_retries(
+        story_chain.invoke,
+        {"full_prompt": arrival_prompt},
+        call_name="room arrival narration",
+    ).strip()
+
+    return {
+        "history": history + [f"Story: {arrival_story}"],
+        "current_story": arrival_story,
+        "current_location_id": next_id,
+        "location_index": next_index,
+        "completed_location_ids": completed_location_ids,
+    }
+
 
 def step_generate_story(state: GameState) -> GameState:
     history = compress_history(state["history"])
@@ -527,6 +688,7 @@ def build_post_input_graph(builder: StateGraph):
     builder.add_node("agent_think", step_agent_think)
     builder.add_node("prepare_combat", step_prepare_combat)
     builder.add_node("generate_story", step_generate_story)
+    builder.add_node("evaluate_room_progression", step_evaluate_room_progression)
     builder.add_node("evaluate_goals", step_evaluate_goals)
     builder.add_node("generate_victory_wrapup", step_generate_victory_wrapup)
 
@@ -554,7 +716,8 @@ def build_post_input_graph(builder: StateGraph):
     )
 
     builder.add_edge("prepare_combat", END)
-    builder.add_edge("generate_story", "evaluate_goals")
+    builder.add_edge("generate_story", "evaluate_room_progression")
+    builder.add_edge("evaluate_room_progression", "evaluate_goals")
     builder.add_conditional_edges(
         "evaluate_goals",
         lambda s: "victory" if s.get("adventure_completed") and not s.get("should_end") else "continue",

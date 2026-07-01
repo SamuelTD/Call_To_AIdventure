@@ -166,6 +166,7 @@
 
                         <div class="action-row">
                             <button type="submit" id="next-btn">Next</button>
+                            <button type="button" id="current-room-btn">Check current room</button>
                         </div>
                     </form>
                 </div>
@@ -206,6 +207,7 @@
     <script>
         const API_STATE_URL = "{% url 'api_state' %}";
         const API_STEP_URL = "{% url 'api_step' %}";
+        const API_CURRENT_ROOM_URL = "{% url 'api_current_room' %}";
         const PLAY_URL = "{% url 'play' %}";
         const COMBAT_URL = "{% url 'combat' %}";
         const GAMEOVER_URL = "{% url 'gameover' %}";
@@ -216,6 +218,7 @@
         const choicesContainer = document.getElementById("choices-container");
         const choiceForm = document.getElementById("choice-form");
         const nextBtn = document.getElementById("next-btn");
+        const currentRoomBtn = document.getElementById("current-room-btn");
         const statusBox = document.getElementById("status");
 
         const playerName = document.getElementById("player-name");
@@ -359,6 +362,44 @@
                 statusBox.classList.add("error");
             } finally {
                 nextBtn.disabled = false;
+            }
+        });
+
+        currentRoomBtn.addEventListener("click", async () => {
+            statusBox.classList.remove("error");
+            statusBox.textContent = "Checking current room...";
+            nextBtn.disabled = true;
+            currentRoomBtn.disabled = true;
+
+            try {
+                const response = await fetch(API_CURRENT_ROOM_URL, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({})
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || "Room check failed");
+                }
+
+                if (data.player) {
+                    renderPlayer(data.player);
+                }
+
+                storyBox.textContent = data.story || "";
+                renderChoices(data.choices || []);
+                statusBox.textContent = "";
+            } catch (err) {
+                console.error(err);
+                statusBox.textContent = err.message;
+                statusBox.classList.add("error");
+            } finally {
+                nextBtn.disabled = false;
+                currentRoomBtn.disabled = false;
             }
         });
 

@@ -1,0 +1,67 @@
+{
+  "id": "tomb_dragonkin_scale_hall",
+  "type": "location",
+  "name": "Hall of Fallen Scales",
+  "region": "Tomb of Dragonkin",
+  "description": "This long chamber is paved with bronze scales set into cracked stone, each one etched with the name of a dead draconic champion. A low red glow pulses beneath the floor like banked embers.",
+  "monsters": [
+    "Giant Spider",
+    "Goblin Warrior"
+  ],
+  "challenges": [
+    "Some bronze scales tilt underfoot and trigger dart slits hidden between the champion names.",
+    "A hanging web curtain conceals movement near the far archway."
+  ],
+  "clues": [
+    "The safest path follows the champion names that face east instead of west.",
+    "One broken scale shows a faded emerald sword mark beneath the bronze plating."
+  ],
+  "loot": [
+    "A small ruby scale worth a handful of gold."
+  ],
+  "history": {
+    "founding": null,
+    "notable_events": [
+      {
+        "year": null,
+        "event": "The Dragonkin carved the names of their fallen champions here so intruders would tread on their memory before facing their wrath."
+      }
+    ]
+  },
+  "features": [
+    {
+      "feature_id": "bronze_scale_floor",
+      "name": "Bronze Scale Floor",
+      "description": "A patterned floor of metal scales, many of which hide pressure plates."
+    },
+    {
+      "feature_id": "webbed_archway",
+      "name": "Webbed Archway",
+      "description": "A narrow exit veiled by thick strands of dusty spider silk."
+    }
+  ],
+  "inhabitants": [],
+  "connections": {
+    "adjacent_locations": [
+      "tomb_dragonkin_sealed_gate",
+      "tomb_dragonkin_emerald_shrine"
+    ],
+    "secret_passages": []
+  },
+  "completion": {
+    "objective": "Cross the trapped hall and reach the Emerald Shrine.",
+    "signals": [
+      "the trapped floor is crossed",
+      "the player reaches the far archway",
+      "the webbed archway is passed",
+      "the player enters the emerald shrine"
+    ]
+  },
+  "tags": [
+    "dungeon",
+    "hall",
+    "dragonkin",
+    "trap",
+    "combat"
+  ]
+}

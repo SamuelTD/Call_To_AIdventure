@@ -14,6 +14,7 @@ from agents.game_master_graph import (
     step_generate_story,
     step_agent_think,
     step_evaluate_goals,
+    step_evaluate_room_progression,
     step_generate_victory_wrapup,
     step_get_input,
 )
@@ -115,6 +116,19 @@ class CombatEngineTests(SimpleTestCase):
         self.assertEqual(result["mode"], "combat")
         self.assertEqual(result["combat_log"], "Combat already underway.")
         self.assertEqual(result["monster_hp"], 8)
+
+    @patch("game.services.game_engine.describe_current_room")
+    def test_check_current_room_preserves_choices(self, describe_current_room):
+        describe_current_room.return_value = "The sealed gate waits in the ash."
+        state = make_game_state()
+        state["current_choices"] = ["Inspect rings", "Light torch", "Listen"]
+
+        result = self.engine.check_current_room(state)
+
+        self.assertEqual(result["mode"], "story")
+        self.assertEqual(result["story"], "The sealed gate waits in the ash.")
+        self.assertEqual(result["choices"], ["Inspect rings", "Light torch", "Listen"])
+        self.assertEqual(state["current_story"], "The sealed gate waits in the ash.")
 
     @patch("game.services.game_engine.get_current_combat_state")
     @patch("game.services.game_engine.monster_attack")
@@ -657,6 +671,42 @@ class SaveGamePersistenceTests(TestCase):
         self.assertEqual(save.state["current_story"], "An old road waits.")
 
     @patch("game.views.get_engine")
+    def test_current_room_replaces_story_and_keeps_choices(self, get_engine):
+        user = User.objects.create_user(
+            username="room_checker",
+            password="LongEnoughPassword42",
+        )
+        self.client.force_login(user)
+        state = make_game_state()
+        state["current_choices"] = ["Inspect rings", "Light torch", "Listen"]
+        session = self.client.session
+        session["game_state"] = make_serializable_state(state)
+        session.save()
+
+        updated_state = {**state, "current_story": "The basalt gate waits."}
+        get_engine.return_value.check_current_room.return_value = {
+            "state": updated_state,
+            "mode": "story",
+            "story": "The basalt gate waits.",
+            "choices": state["current_choices"],
+        }
+
+        response = self.client.post(
+            reverse("api_current_room"),
+            {},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["story"], "The basalt gate waits.")
+        self.assertEqual(response.json()["choices"], ["Inspect rings", "Light torch", "Listen"])
+        self.assertEqual(self.client.session["game_state"]["current_story"], "The basalt gate waits.")
+        self.assertEqual(
+            self.client.session["game_state"]["current_choices"],
+            ["Inspect rings", "Light torch", "Listen"],
+        )
+
+    @patch("game.views.get_engine")
     def test_gameover_marks_current_save_as_finished(self, get_engine):
         user = User.objects.create_user(
             username="fallen_runner",
@@ -1028,6 +1078,75 @@ class DamageToolTests(SimpleTestCase):
 
 
 class GoalEvaluationTests(SimpleTestCase):
+    def make_room_state(self):
+        adventure = Adventure(
+            id="emerald_sword",
+            name="The Emerald Sword",
+            description="A test adventure.",
+            goals=["Retrieve the Emerald Sword."],
+            monsters=[],
+            characters={"active": [], "referenceable": []},
+            locations={
+                "available": [
+                    "tomb_dragonkin_sealed_gate",
+                    "tomb_dragonkin_scale_hall",
+                    "tomb_dragonkin_emerald_shrine",
+                ],
+                "start": "tomb_dragonkin_sealed_gate",
+            },
+        )
+        return {
+            "player": make_player(),
+            "adventure": adventure,
+            "history": ["Story: The sealed gate blocks the way."],
+            "latest_user": "Align the rings.",
+            "current_story": "The basalt gate opens with a roar of stone.",
+            "current_location_id": "tomb_dragonkin_sealed_gate",
+            "location_index": 0,
+            "completed_location_ids": [],
+            "should_end": False,
+        }
+
+    @patch("agents.game_master_graph.room_completion_chain")
+    def test_room_progression_stays_when_objective_is_incomplete(self, room_completion_chain):
+        room_completion_chain.invoke.return_value = type(
+            "RoomResult",
+            (),
+            {"room_completed": False, "reason": "The gate remains closed."},
+        )()
+        state = self.make_room_state()
+        state["current_story"] = "The rings turn, but the gate remains sealed."
+
+        output = step_evaluate_room_progression(state)
+
+        self.assertEqual(output, {})
+
+    @patch("agents.game_master_graph.retrieve_rag_context")
+    @patch("agents.game_master_graph.story_chain")
+    @patch("agents.game_master_graph.room_completion_chain")
+    def test_room_progression_advances_linearly_when_objective_completes(
+        self,
+        room_completion_chain,
+        story_chain,
+        retrieve_rag_context,
+    ):
+        room_completion_chain.invoke.return_value = type(
+            "RoomResult",
+            (),
+            {"room_completed": True, "reason": "The gate opened."},
+        )()
+        story_chain.invoke.return_value = "You step into the Hall of Fallen Scales."
+        retrieve_rag_context.return_value = "Hall lore"
+        state = self.make_room_state()
+
+        output = step_evaluate_room_progression(state)
+
+        self.assertEqual(output["current_location_id"], "tomb_dragonkin_scale_hall")
+        self.assertEqual(output["location_index"], 1)
+        self.assertEqual(output["completed_location_ids"], ["tomb_dragonkin_sealed_gate"])
+        self.assertEqual(output["current_story"], "You step into the Hall of Fallen Scales.")
+        self.assertIn("Story: You step into the Hall of Fallen Scales.", output["history"])
+
     @patch("agents.game_master_graph.goal_evaluator_chain")
     def test_evaluate_goals_moves_only_exact_ongoing_goal_matches(self, goal_evaluator_chain):
         result = type(

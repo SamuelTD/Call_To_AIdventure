@@ -19,6 +19,7 @@ LocationChunkKind = Literal[
     "connections",
     "clues",
     "loot",
+    "completion",
 ]
 ChunkKind = CharacterChunkKind | LocationChunkKind
 Visibility = Literal["active", "referenceable", "global"]
@@ -97,6 +98,11 @@ class LocationConnections(BaseModel):
     secret_passages: list[SecretPassage] = Field(default_factory=list)
 
 
+class LocationCompletion(BaseModel):
+    objective: str = ""
+    signals: list[str] = Field(default_factory=list)
+
+
 class LocationLore(BaseModel):
     id: str
     type: Literal["location"] = "location"
@@ -112,6 +118,7 @@ class LocationLore(BaseModel):
     features: list[LocationFeature] = Field(default_factory=list)
     inhabitants: list[LocationInhabitant] = Field(default_factory=list)
     connections: LocationConnections = Field(default_factory=LocationConnections)
+    completion: LocationCompletion = Field(default_factory=LocationCompletion)
     tags: list[str] = Field(default_factory=list)
 
 

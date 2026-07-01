@@ -19,6 +19,24 @@ def ensure_goal_state(state: dict) -> dict:
 
     return state
 
+
+def ensure_room_state(state: dict) -> dict:
+    adventure = state.get("adventure")
+    locations = list(adventure.locations.available) if adventure else []
+    current_location_id = state.get("current_location_id")
+
+    if not current_location_id and adventure:
+        current_location_id = adventure.locations.start
+        state["current_location_id"] = current_location_id
+
+    if current_location_id in locations:
+        state["location_index"] = locations.index(current_location_id)
+    else:
+        state.setdefault("location_index", 0 if locations else -1)
+
+    state.setdefault("completed_location_ids", [])
+    return state
+
 def make_serializable_state(state: dict) -> dict:
     safe = state.copy()
 
@@ -46,7 +64,7 @@ def rebuild_state(serialized_state: dict) -> dict:
     if state.get("current_monster"):
         state["current_monster"] = Monster.from_dict(state["current_monster"])
 
-    return ensure_goal_state(state)
+    return ensure_room_state(ensure_goal_state(state))
 
 def persist_game(
     request,
@@ -118,6 +136,12 @@ def initialize_game(adventure_id: str, player: Player):
         "adventure_completed": False,
         "end_reason": None,
         "current_location_id": adventure.locations.start,
+        "location_index": (
+            adventure.locations.available.index(adventure.locations.start)
+            if adventure.locations.start in adventure.locations.available
+            else -1
+        ),
+        "completed_location_ids": [],
         "heal_amount": 0,
         "actual_heal_amount": 0,
         "damage_amount": 0,

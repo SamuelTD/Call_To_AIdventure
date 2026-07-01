@@ -252,6 +252,40 @@ class StepGameView(View):
         })
 
 @method_decorator(csrf_exempt, name="dispatch")
+class CurrentRoomView(View):
+
+    def post(self, request):
+        serialized_state = request.session.get("game_state")
+
+        if not serialized_state:
+            return JsonResponse({"error": "No active game"}, status=400)
+
+        state = rebuild_state(serialized_state)
+        engine = get_engine()
+        result = engine.check_current_room(state)
+
+        player_sheet = build_character_sheet(state["player"])
+
+        if result["mode"] == "service_unavailable":
+            return JsonResponse(
+                {
+                    "mode": "service_unavailable",
+                    "error": settings.LLM_SERVICE_UNAVAILABLE_MESSAGE,
+                    "player": player_sheet,
+                },
+                status=settings.LLM_SERVICE_UNAVAILABLE_STATUS_CODE,
+            )
+
+        persist_game(request, result["state"])
+
+        return JsonResponse({
+            "mode": "story",
+            "story": result["story"],
+            "choices": result["choices"],
+            "player": player_sheet,
+        })
+
+@method_decorator(csrf_exempt, name="dispatch")
 class StartCombatView(View):
 
     def post(self, request):

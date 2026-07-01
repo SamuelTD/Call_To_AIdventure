@@ -1,0 +1,64 @@
+{
+  "id": "tomb_dragonkin_sealed_gate",
+  "type": "location",
+  "name": "Sealed Gate of Dragonkin",
+  "region": "Tomb of Dragonkin",
+  "description": "A narrow stair descends into a half-buried antechamber where a basalt gate waits beneath a carved dragon skull. Old torch brackets line the walls, and the air tastes of dust, cold iron, and distant smoke.",
+  "monsters": [
+    "Kobold Warrior"
+  ],
+  "challenges": [
+    "The basalt gate is locked by three rotating stone rings marked with claw, flame, and crown symbols.",
+    "A careless touch on the wrong ring releases a burst of choking ash from vents in the floor."
+  ],
+  "clues": [
+    "A cracked inscription reads: 'Claw serves flame; flame bows to crown.'",
+    "Fresh scratches near the lowest ring suggest small clawed hands recently forced the mechanism."
+  ],
+  "loot": [
+    "A tarnished bronze key shaped like a dragon talon."
+  ],
+  "history": {
+    "founding": {
+      "year": null,
+      "founder": "The Dragonkin Lords",
+      "purpose": "To bar unworthy thieves from the tomb's inner sanctum."
+    },
+    "notable_events": []
+  },
+  "features": [
+    {
+      "feature_id": "basalt_gate",
+      "name": "Basalt Gate",
+      "description": "A heavy black stone door whose rings must be aligned before it will open."
+    },
+    {
+      "feature_id": "ash_vents",
+      "name": "Ash Vents",
+      "description": "Thin slits in the floor that cough bitter grey ash when the gate is disturbed."
+    }
+  ],
+  "inhabitants": [],
+  "connections": {
+    "adjacent_locations": [
+      "tomb_dragonkin_scale_hall"
+    ],
+    "secret_passages": []
+  },
+  "completion": {
+    "objective": "Open the basalt gate and pass into the Hall of Fallen Scales.",
+    "signals": [
+      "the basalt gate opens",
+      "the player passes through the gate",
+      "the gate mechanism is solved",
+      "the player enters the hall beyond"
+    ]
+  },
+  "tags": [
+    "dungeon",
+    "entrance",
+    "dragonkin",
+    "trap",
+    "locked"
+  ]
+}

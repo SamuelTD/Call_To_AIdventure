@@ -17,8 +17,12 @@
     ]
   },
   "locations": {
-    "available": [],
-    "start": null
+    "available": [
+      "tomb_dragonkin_sealed_gate",
+      "tomb_dragonkin_scale_hall",
+      "tomb_dragonkin_emerald_shrine"
+    ],
+    "start": "tomb_dragonkin_sealed_gate"
   },
   "items": [
     

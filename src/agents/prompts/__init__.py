@@ -7,6 +7,9 @@ from .story import (
     build_post_heal_story_prompt,
     build_post_damage_story_prompt,
     build_regular_story_prompt,
+    build_current_room_prompt,
+    build_room_completion_prompt,
+    build_room_arrival_prompt,
     build_goal_evaluation_prompt,
     build_victory_wrapup_prompt,
 )
@@ -21,6 +24,9 @@ __all__ = [
     "build_post_heal_story_prompt",
     "build_post_damage_story_prompt",
     "build_regular_story_prompt",
+    "build_current_room_prompt",
+    "build_room_completion_prompt",
+    "build_room_arrival_prompt",
     "build_goal_evaluation_prompt",
     "build_victory_wrapup_prompt",
 ]
