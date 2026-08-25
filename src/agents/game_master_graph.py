@@ -1,8 +1,6 @@
 #region IMPORTS
-import os
 import re
 import json
-import random
 
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, START, END
@@ -48,13 +46,9 @@ load_dotenv()
 
 
 #region CONFIG
-seed = random.randrange(2**32)
-
 CHAR_COL = "characters"
 LOC_COL = "locations"
 EMBEDDING_MODEL = "mxbai-embed-large:latest"
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL")
 #endregion
 
 

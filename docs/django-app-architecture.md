@@ -770,7 +770,7 @@ usually invokes the pre-input graph again to produce the next choices.
 
 ### LLM Runtime
 
-The graph uses Groq through `src/agents/llm_runtime.py`. Django only sees the
+The graph uses OpenAI through `src/agents/llm_runtime.py`. Django only sees the
 resulting mode and payload.
 
 Transient LLM failures are surfaced as `service_unavailable`. The view returns

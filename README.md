@@ -11,7 +11,7 @@ main way to run the project.
 
 - Python 3.12 or newer
 - `uv` for dependency and virtual environment management
-- A Groq API key for the story-generation LLM
+- An OpenAI API key for the story-generation LLM
 - Optional: Ollama, only if you want to rebuild or experiment with the RAG
   Chroma database
 
@@ -53,8 +53,9 @@ cp .env.example .env
 Edit `.env` and fill in at least these values:
 
 ```bash
-GROQ_API_KEY=your_groq_api_key
-GROQ_MODEL=your_groq_model_name
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_MODEL=gpt-5.6-luna
+OPENAI_REASONING_EFFORT=low
 DB_PATH=db/sqlite/data.db
 ```
 
@@ -153,8 +154,11 @@ uv run python src/django/manage.py runserver 127.0.0.1:8001
 
 Required for normal gameplay:
 
-- `GROQ_API_KEY`: Groq API key used by `langchain-groq`
-- `GROQ_MODEL`: Groq chat model used for story generation
+- `OPENAI_API_KEY`: OpenAI API key used by `langchain-openai`
+- `OPENAI_MODEL`: OpenAI model used for story generation, default
+  `gpt-5.6-luna`
+- `OPENAI_REASONING_EFFORT`: reasoning effort used for model calls, default
+  `low`
 - `DB_PATH`: project-relative path to the game data SQLite database, normally
   `db/sqlite/data.db`
 
@@ -253,7 +257,7 @@ If adventures do not appear on the landing page, rebuild the game data database:
 uv run python db/sqlite/setup_db.py --reset
 ```
 
-If story generation fails, verify `GROQ_API_KEY` and `GROQ_MODEL` in `.env`.
+If story generation fails, verify `OPENAI_API_KEY` and `OPENAI_MODEL` in `.env`.
 
 If imports fail when running scripts outside Django, run through `uv` from the
 repository root. For module-style commands that import `src` packages directly,
