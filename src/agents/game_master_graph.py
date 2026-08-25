@@ -91,6 +91,10 @@ class GameState(TypedDict, total=False):
 #endregion
 
 #region RUNTIME INIT
+instruction = ""
+thinker_agent = None
+
+
 def initialize_graph_runtime(state: GameState) -> None:
     global instruction, thinker_agent
 
@@ -303,6 +307,14 @@ def step_get_input(state: GameState) -> GameState:
     }
 
 def step_agent_think(state: GameState) -> GameState:
+    global thinker_agent
+
+    # A saved game can be resumed after the Django process has restarted, without
+    # passing through GameEngine.initialize(). Recreate the process-local agent
+    # lazily in that case.
+    if thinker_agent is None:
+        initialize_graph_runtime(state)
+
     sys_msg = SystemMessage(content=build_thinker_system_message(state["adventure"].monsters))
 
     human_msg = HumanMessage(

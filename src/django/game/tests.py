@@ -979,6 +979,25 @@ class DamageToolTests(SimpleTestCase):
         self.assertEqual(result["damage_amount"], 5)
         self.assertEqual(result["heal_amount"], 0)
 
+    @patch("agents.game_master_graph.build_thinker_agent")
+    @patch("agents.game_master_graph.thinker_agent", None)
+    def test_agent_think_initializes_runtime_when_resuming_after_restart(
+        self,
+        build_thinker_agent,
+    ):
+        message = type("Message", (), {"content": '{"action":"nothing"}'})
+        build_thinker_agent.return_value.invoke.return_value = {"messages": [message]}
+        adventure = type("Adventure", (), {"monsters": []})
+
+        result = step_agent_think({
+            "adventure": adventure,
+            "current_story": "The road continues.",
+            "latest_user": "I keep walking.",
+        })
+
+        build_thinker_agent.assert_called_once_with()
+        self.assertEqual(result["last_cmd"], "continue")
+
     @patch("agents.game_master_graph.story_chain")
     def test_generate_story_applies_damage_and_marks_death(self, story_chain):
         story_chain.invoke.return_value = "The stones rush up, and darkness follows."
