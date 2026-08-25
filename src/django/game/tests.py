@@ -24,6 +24,12 @@ from utils.adventure import Adventure
 from utils.enums import CharacterClass, PlayerAction
 from utils.monster import Monster
 from utils.player import Player
+from observability.metrics import (
+    GAMES_STARTED,
+    LLM_ATTEMPTS,
+    LLM_REQUESTS,
+    LLM_RETRIES,
+)
 
 
 def make_player(hp=20):
@@ -495,6 +501,8 @@ class SaveGamePersistenceTests(TestCase):
         adventure = state["adventure"]
         initialize_game.return_value = (state, "An old road waits.", adventure)
         get_engine.return_value.initialize.return_value = state
+        metric = GAMES_STARTED.labels(adventure=adventure.id)
+        before = metric._value.get()
 
         response = self.client.post(
             reverse("api_start"),
@@ -509,6 +517,7 @@ class SaveGamePersistenceTests(TestCase):
         self.assertEqual(SaveGame.objects.count(), 0)
         self.assertIn("game_state", self.client.session)
         self.assertNotIn("save_game_id", self.client.session)
+        self.assertEqual(metric._value.get(), before + 1)
 
     @patch("game.views.get_engine")
     @patch("game.views.initialize_game")
@@ -903,6 +912,15 @@ class HealingToolTests(SimpleTestCase):
     )
     @patch("agents.game_master_graph.story_chain")
     def test_generate_story_retries_transient_story_failures(self, story_chain):
+        attempts = LLM_ATTEMPTS.labels(operation="story generation")
+        retries = LLM_RETRIES.labels(operation="story generation")
+        successes = LLM_REQUESTS.labels(
+            operation="story generation",
+            status="success",
+        )
+        attempts_before = attempts._value.get()
+        retries_before = retries._value.get()
+        successes_before = successes._value.get()
         story_chain.invoke.side_effect = [
             TimeoutError("temporary timeout"),
             "Warmth returns after a brief silence.",
@@ -922,6 +940,9 @@ class HealingToolTests(SimpleTestCase):
         self.assertEqual(story_chain.invoke.call_count, 2)
         self.assertEqual(result["current_story"], "Warmth returns after a brief silence.")
         self.assertEqual(player.hp, 20)
+        self.assertEqual(attempts._value.get(), attempts_before + 2)
+        self.assertEqual(retries._value.get(), retries_before + 1)
+        self.assertEqual(successes._value.get(), successes_before + 1)
 
     @override_settings(
         LLM_RETRY_MAX_ATTEMPTS=1,
@@ -932,6 +953,11 @@ class HealingToolTests(SimpleTestCase):
     )
     @patch("agents.game_master_graph.story_chain")
     def test_generate_story_failure_leaves_state_unadvanced(self, story_chain):
+        unavailable = LLM_REQUESTS.labels(
+            operation="story generation",
+            status="unavailable",
+        )
+        unavailable_before = unavailable._value.get()
         story_chain.invoke.side_effect = TimeoutError("temporary timeout")
         player = make_player(hp=18)
         state = {
@@ -952,6 +978,17 @@ class HealingToolTests(SimpleTestCase):
         self.assertEqual(state["story_steps"], 2)
         self.assertEqual(state["last_cmd"], "heal")
         self.assertEqual(state["heal_amount"], 8)
+        self.assertEqual(unavailable._value.get(), unavailable_before + 1)
+
+
+class MetricsEndpointTests(SimpleTestCase):
+    def test_metrics_endpoint_exposes_application_metrics(self):
+        response = self.client.get("/metrics")
+        body = response.content.decode("utf-8")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("aidventure_games_started_total", body)
+        self.assertIn("django_http_requests_total", body)
 
 
 class DamageToolTests(SimpleTestCase):

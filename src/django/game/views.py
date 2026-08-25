@@ -13,6 +13,14 @@ from game.models import CharacterTemplate, SaveGame
 from game.services.tools import initialize_game, persist_game, rebuild_state
 from game.services.game_engine import get_engine
 from utils.player import create_player, get_character_creation_options
+from observability.metrics import (
+    ADVENTURE_RESULTS,
+    COMBAT_ACTIONS,
+    COMBAT_RESULTS,
+    COMBATS_STARTED,
+    GAMES_STARTED,
+    GAME_TURNS,
+)
 
 from uuid import uuid4
 import json
@@ -156,6 +164,7 @@ class StartGameView(View):
         # run the engine initialization (this runs pre_graph)
         engine = get_engine()
         state = engine.initialize(state)
+        GAMES_STARTED.labels(adventure=adventure.id).inc()
 
         session_id = str(uuid4())
 
@@ -197,6 +206,7 @@ class StepGameView(View):
         # Run engine step
         engine = get_engine()
         result = engine.step(state, choice)
+        GAME_TURNS.labels(mode=result["mode"]).inc()
 
         state = result["state"]
 
@@ -213,6 +223,7 @@ class StepGameView(View):
             )
 
         if result["mode"] == "gameover":
+            ADVENTURE_RESULTS.labels(result="defeat").inc()
             persist_game(request, state, finish=True)
             return JsonResponse({
                 "mode": "gameover",
@@ -220,6 +231,7 @@ class StepGameView(View):
             })
 
         if result["mode"] == "adventure_victory":
+            ADVENTURE_RESULTS.labels(result="victory").inc()
             persist_game(request, state, finish=True)
             return JsonResponse({
                 "mode": "adventure_victory",
@@ -296,6 +308,7 @@ class StartCombatView(View):
             return JsonResponse({"error": "No active game"}, status=400)
 
         state = rebuild_state(serialized_state)
+        was_already_started = state.get("current_monster") is not None
 
         engine = get_engine()
         result = engine.start_combat(state)
@@ -304,6 +317,11 @@ class StartCombatView(View):
 
         if result.get("mode") == "error":
             return JsonResponse({"error": result.get("error", "Failed to start combat")}, status=400)
+
+        if not was_already_started:
+            COMBATS_STARTED.labels(
+                monster=state.get("current_monster_name") or "unknown"
+            ).inc()
 
         persist_game(request, state)
 
@@ -339,6 +357,10 @@ class CombatActionView(View):
 
         if result.get("mode") == "error":
             return JsonResponse({"error": result.get("error", "Combat action failed")}, status=400)
+
+        COMBAT_ACTIONS.labels(action=action).inc()
+        if result.get("mode") in {"victory", "defeat"}:
+            COMBAT_RESULTS.labels(result=result["mode"]).inc()
 
         persist_game(request, state, finish=result.get("mode") == "defeat")
         

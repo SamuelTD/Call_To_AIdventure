@@ -6,6 +6,13 @@ from typing import Any, Callable
 
 from django.conf import settings
 
+from observability.metrics import (
+    LLM_ATTEMPTS,
+    LLM_REQUEST_DURATION,
+    LLM_REQUESTS,
+    LLM_RETRIES,
+)
+
 
 class TemporaryLLMServiceError(Exception):
     """Raised when an LLM call remains unavailable after configured retries."""
@@ -116,21 +123,41 @@ def invoke_llm_with_retries(
     config = get_llm_retry_config()
     delay = config.initial_delay_seconds
     last_error: Exception | None = None
+    started_at = time.perf_counter()
 
-    for attempt in range(1, config.max_attempts + 1):
-        try:
-            return invoker(payload)
-        except Exception as exc:
-            last_error = exc
-            if not is_transient_llm_error(exc, config):
-                raise
-            if attempt >= config.max_attempts:
-                break
+    try:
+        for attempt in range(1, config.max_attempts + 1):
+            LLM_ATTEMPTS.labels(operation=call_name).inc()
+            try:
+                result = invoker(payload)
+            except Exception as exc:
+                last_error = exc
+                if not is_transient_llm_error(exc, config):
+                    LLM_REQUESTS.labels(operation=call_name, status="error").inc()
+                    raise
+                if attempt >= config.max_attempts:
+                    break
 
-            jitter = random.uniform(0, config.jitter_seconds) if config.jitter_seconds else 0
-            time.sleep(delay + jitter)
-            delay = min(config.max_delay_seconds, delay * config.backoff_multiplier)
+                LLM_RETRIES.labels(operation=call_name).inc()
+                jitter = (
+                    random.uniform(0, config.jitter_seconds)
+                    if config.jitter_seconds
+                    else 0
+                )
+                time.sleep(delay + jitter)
+                delay = min(
+                    config.max_delay_seconds,
+                    delay * config.backoff_multiplier,
+                )
+            else:
+                LLM_REQUESTS.labels(operation=call_name, status="success").inc()
+                return result
 
-    raise TemporaryLLMServiceError(
-        f"{call_name} failed after {config.max_attempts} configured attempt(s)."
-    ) from last_error
+        LLM_REQUESTS.labels(operation=call_name, status="unavailable").inc()
+        raise TemporaryLLMServiceError(
+            f"{call_name} failed after {config.max_attempts} configured attempt(s)."
+        ) from last_error
+    finally:
+        LLM_REQUEST_DURATION.labels(operation=call_name).observe(
+            time.perf_counter() - started_at
+        )

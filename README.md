@@ -97,6 +97,26 @@ Open the app at:
 http://127.0.0.1:8000/
 ```
 
+## Optional Monitoring
+
+The repository includes a local Prometheus and Grafana stack. In one terminal,
+run Django on an address reachable from Docker:
+
+```bash
+uv run python src/django/manage.py runserver 0.0.0.0:8000
+```
+
+In a second terminal, start the monitoring services:
+
+```bash
+docker compose -f compose.monitoring.yml up -d
+```
+
+Prometheus is available at `http://localhost:9090` and Grafana at
+`http://localhost:3000`. Grafana provisions the Prometheus data source and the
+initial project dashboard automatically. See `docs/monitoring.md` for metrics,
+credentials, verification, privacy guidance, and production considerations.
+
 ## Useful Development Commands
 
 Run Django checks:
