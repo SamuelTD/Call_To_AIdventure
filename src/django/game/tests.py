@@ -11,6 +11,7 @@ from game.services.tools import ensure_goal_state, make_serializable_state
 from agents.game_master_graph import (
     normalize_damage_amount,
     normalize_heal_amount,
+    retrieve_known_location_context,
     step_generate_story,
     step_agent_think,
     step_evaluate_goals,
@@ -20,6 +21,12 @@ from agents.game_master_graph import (
 )
 from agents.llm_resilience import TemporaryLLMServiceError
 from agents.tools import deal_damage_tool, heal_tool, tools
+from retrieval.service import (
+    clear_retrieval_cache,
+    retrieve_location_context,
+    retrieve_lore_context,
+)
+from retrieval.schemas import RetrievalScope
 from utils.adventure import Adventure
 from utils.enums import CharacterClass, PlayerAction
 from utils.monster import Monster
@@ -188,6 +195,65 @@ class CombatEngineTests(SimpleTestCase):
         self.assertEqual(invalid_action["error"], "Invalid combat action")
 
 
+class RetrievalSpeedTests(SimpleTestCase):
+    def tearDown(self):
+        clear_retrieval_cache()
+
+    @patch("retrieval.service.embed")
+    def test_known_location_context_does_not_embed(self, embed):
+        context = retrieve_location_context("tomb_dragonkin_sealed_gate")
+
+        embed.assert_not_called()
+        self.assertTrue(context.chunks)
+        self.assertEqual(
+            {result.chunk.entity_id for result in context.chunks},
+            {"tomb_dragonkin_sealed_gate"},
+        )
+
+    @patch("retrieval.service.query_lore_collection")
+    @patch("retrieval.service.embed")
+    def test_semantic_retrieval_caches_identical_queries(self, embed, query_lore_collection):
+        clear_retrieval_cache()
+        embed.return_value = [0.1, 0.2, 0.3]
+        query_lore_collection.return_value = {
+            "ids": [[]],
+            "documents": [[]],
+            "metadatas": [[]],
+            "distances": [[]],
+        }
+        scope = RetrievalScope(
+            available_location_ids=["tomb_dragonkin_sealed_gate"],
+            current_location_id="tomb_dragonkin_sealed_gate",
+        )
+
+        retrieve_lore_context(
+            "Describe the sealed gate.",
+            scope,
+            entity_types=["location"],
+            top_k=3,
+        )
+        retrieve_lore_context(
+            "Describe the sealed gate.",
+            scope,
+            entity_types=["location"],
+            top_k=3,
+        )
+
+        embed.assert_called_once_with("Describe the sealed gate.")
+        query_lore_collection.assert_called_once()
+
+    def test_graph_known_location_context_respects_adventure_scope(self):
+        state = make_game_state()
+        state["adventure"].locations.available = ["tomb_dragonkin_sealed_gate"]
+
+        context = retrieve_known_location_context(
+            state,
+            "tomb_dragonkin_scale_hall",
+        )
+
+        self.assertEqual(context, "No relevant world lore was retrieved.")
+
+
 class AccountFlowTests(TestCase):
     def test_login_page_renders(self):
         response = self.client.get(reverse("login"))
@@ -222,6 +288,50 @@ class AccountFlowTests(TestCase):
 
         self.assertRedirects(response, reverse("landing"))
         self.assertNotContains(response, "loaded_player")
+
+
+@override_settings(DEBUG=True)
+class DevAccountDashboardTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="debug_player", password="old-password")
+
+    def test_dashboard_lists_users_without_exposing_password_hash(self):
+        response = self.client.get(reverse("dev_accounts"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "debug_player")
+        self.assertNotContains(response, self.user.password)
+        self.assertNotContains(response, "old-password")
+
+    @override_settings(DEBUG=False)
+    def test_dashboard_is_unavailable_outside_debug_mode(self):
+        response = self.client.get(reverse("dev_accounts"))
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_dashboard_is_unavailable_to_non_loopback_requests(self):
+        response = self.client.get(reverse("dev_accounts"), REMOTE_ADDR="192.0.2.10")
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_can_set_a_new_password(self):
+        response = self.client.post(
+            reverse("dev_accounts"),
+            {"action": "set_password", "user_id": self.user.pk, "new_password": "new-password"},
+        )
+
+        self.assertRedirects(response, reverse("dev_accounts"))
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("new-password"))
+
+    def test_can_delete_an_account(self):
+        response = self.client.post(
+            reverse("dev_accounts"),
+            {"action": "delete", "user_id": self.user.pk},
+        )
+
+        self.assertRedirects(response, reverse("dev_accounts"))
+        self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
 
 
 class CharacterTemplateTests(TestCase):
@@ -1177,14 +1287,14 @@ class GoalEvaluationTests(SimpleTestCase):
 
         self.assertEqual(output, {})
 
-    @patch("agents.game_master_graph.retrieve_rag_context")
+    @patch("agents.game_master_graph.retrieve_known_location_context")
     @patch("agents.game_master_graph.story_chain")
     @patch("agents.game_master_graph.room_completion_chain")
     def test_room_progression_advances_linearly_when_objective_completes(
         self,
         room_completion_chain,
         story_chain,
-        retrieve_rag_context,
+        retrieve_known_location_context,
     ):
         room_completion_chain.invoke.return_value = type(
             "RoomResult",
@@ -1192,7 +1302,7 @@ class GoalEvaluationTests(SimpleTestCase):
             {"room_completed": True, "reason": "The gate opened."},
         )()
         story_chain.invoke.return_value = "You step into the Hall of Fallen Scales."
-        retrieve_rag_context.return_value = "Hall lore"
+        retrieve_known_location_context.return_value = "Hall lore"
         state = self.make_room_state()
 
         output = step_evaluate_room_progression(state)

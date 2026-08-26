@@ -1,15 +1,19 @@
+from functools import lru_cache
 from typing import Any
 
 from retrieval.client import query_lore_collection
+from retrieval.chunker import chunk_location_json_file
 from retrieval.embedder import embed
 from retrieval.schemas import (
     EntityType,
+    LocationChunkKind,
     LoreChunk,
     LoreChunkResult,
     RagContext,
     RetrievalScope,
 )
 from utils.adventure import Adventure
+from utils.pathing import project_path
 
 
 def build_retrieval_scope(
@@ -126,7 +130,35 @@ def retrieve_lore_context(
     if not has_retrievable_scope(scope, entity_types):
         return RagContext()
 
-    where = build_scope_filter(scope, entity_types)
+    return _retrieve_lore_context_cached(
+        query.strip(),
+        tuple(scope.active_character_ids),
+        tuple(scope.referenceable_character_ids),
+        tuple(scope.available_location_ids),
+        scope.current_location_id,
+        tuple(entity_types or ()),
+        top_k,
+    )
+
+
+@lru_cache(maxsize=256)
+def _retrieve_lore_context_cached(
+    query: str,
+    active_character_ids: tuple[str, ...],
+    referenceable_character_ids: tuple[str, ...],
+    available_location_ids: tuple[str, ...],
+    current_location_id: str | None,
+    entity_types: tuple[EntityType, ...],
+    top_k: int,
+) -> RagContext:
+    scope = RetrievalScope(
+        active_character_ids=list(active_character_ids),
+        referenceable_character_ids=list(referenceable_character_ids),
+        available_location_ids=list(available_location_ids),
+        current_location_id=current_location_id,
+    )
+    requested_types = list(entity_types) if entity_types else None
+    where = build_scope_filter(scope, requested_types)
     query_embedding = embed(query)
     results = query_lore_collection(
         query_embedding=query_embedding,
@@ -134,3 +166,29 @@ def retrieve_lore_context(
         where=where,
     )
     return rag_context_from_chroma_results(results)
+
+
+def retrieve_location_context(
+    location_id: str,
+    *,
+    chunk_kinds: list[LocationChunkKind] | None = None,
+) -> RagContext:
+    path = project_path(f"data/world/locations/{location_id}.json")
+    if not path.exists():
+        return RagContext()
+
+    chunks = chunk_location_json_file(path)
+    if chunk_kinds:
+        allowed_kinds = set(chunk_kinds)
+        chunks = [chunk for chunk in chunks if chunk.chunk_kind in allowed_kinds]
+
+    return RagContext(
+        chunks=[
+            LoreChunkResult(chunk=chunk, distance=None)
+            for chunk in chunks
+        ]
+    )
+
+
+def clear_retrieval_cache() -> None:
+    _retrieve_lore_context_cached.cache_clear()

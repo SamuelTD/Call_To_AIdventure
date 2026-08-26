@@ -37,7 +37,11 @@ from agents.llm_runtime import (
 )
 from agents.llm_resilience import invoke_llm_with_retries
 from retrieval.schemas import EntityType, RagContext
-from retrieval.service import build_retrieval_scope, retrieve_lore_context
+from retrieval.service import (
+    build_retrieval_scope,
+    retrieve_location_context,
+    retrieve_lore_context,
+)
 from retrieval.chunker import load_location
 from utils.pathing import project_path
 #endregion
@@ -130,6 +134,22 @@ def retrieve_rag_context(
         return context.format_for_prompt()
     except Exception as e:
         print("ERROR RAG RETRIEVAL:", e)
+        return empty_rag_context()
+
+
+def retrieve_known_location_context(
+    state: GameState,
+    location_id: str | None,
+) -> str:
+    if not location_id:
+        return empty_rag_context()
+    if location_id not in location_order(state):
+        return empty_rag_context()
+
+    try:
+        return retrieve_location_context(location_id).format_for_prompt()
+    except Exception as e:
+        print("ERROR LOCATION CONTEXT:", e)
         return empty_rag_context()
 
 
@@ -372,15 +392,9 @@ def step_prepare_combat(state: GameState) -> GameState:
 
 
 def describe_current_room(state: GameState) -> str:
-    rag_context = retrieve_rag_context(
+    rag_context = retrieve_known_location_context(
         state,
-        "\n".join([
-            state.get("current_story", ""),
-            state.get("current_location_id") or "",
-            "Describe the current room.",
-        ]),
-        entity_types=["location"],
-        top_k=5,
+        state.get("current_location_id"),
     )
     prompt = build_current_room_prompt(
         player_summary=state["player"].get_summary(),
@@ -446,15 +460,9 @@ def step_evaluate_room_progression(state: GameState) -> GameState:
         "current_location_id": next_id,
         "location_index": next_index,
     }
-    rag_context = retrieve_rag_context(
+    rag_context = retrieve_known_location_context(
         transition_state,
-        "\n".join([
-            state.get("current_story", ""),
-            next_id,
-            "Describe the room the player enters next.",
-        ]),
-        entity_types=["location"],
-        top_k=5,
+        next_id,
     )
     arrival_prompt = build_room_arrival_prompt(
         player_summary=state["player"].get_summary(),

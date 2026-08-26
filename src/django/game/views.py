@@ -1,5 +1,7 @@
 from django.http import JsonResponse, HttpResponseBadRequest, Http404
 from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.views import View
 from django.views.generic import TemplateView
 from django.utils.decorators import method_decorator
@@ -112,6 +114,47 @@ class HealthView(View):
 
 class DebugPageView(TemplateView):
     template_name = "game/debug.html"
+
+
+class DevAccountDashboardView(TemplateView):
+    """Small account-management utility that is deliberately local-development only."""
+
+    template_name = "game/dev_accounts.html"
+
+    def dispatch(self, request, *args, **kwargs):
+        if not settings.DEBUG or request.META.get("REMOTE_ADDR") not in {"127.0.0.1", "::1"}:
+            raise Http404
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["users"] = get_user_model().objects.order_by("username")
+        return context
+
+    def post(self, request, *args, **kwargs):
+        user_id = request.POST.get("user_id")
+        action = request.POST.get("action")
+        try:
+            user = get_user_model().objects.get(pk=user_id)
+        except (get_user_model().DoesNotExist, ValueError, TypeError):
+            raise Http404
+
+        if action == "delete":
+            username = user.get_username()
+            user.delete()
+            messages.success(request, f'Deleted account "{username}".')
+        elif action == "set_password":
+            new_password = request.POST.get("new_password", "")
+            if not new_password:
+                messages.error(request, "Enter a new password first.")
+            else:
+                user.set_password(new_password)
+                user.save(update_fields=["password"])
+                messages.success(request, f'Updated password for "{user.get_username()}".')
+        else:
+            return HttpResponseBadRequest("Unknown action")
+
+        return redirect("dev_accounts")
 
 @method_decorator(csrf_exempt, name="dispatch")  # simple for now; we'll do proper CSRF/auth later
 class PlayView(View):

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Development accounts</title>
+    <style>
+        body { font: 16px/1.45 system-ui, sans-serif; margin: 2rem; color: #20242a; background: #f5f6f8; }
+        header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+        .warning { padding: .75rem 1rem; border-left: 4px solid #d97706; background: #fff7ed; }
+        .messages { padding: 0; list-style: none; }
+        .messages li { padding: .7rem 1rem; margin: .5rem 0; background: #e8f5e9; border-radius: .4rem; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+        .card { padding: 1rem; border: 1px solid #d6dae0; border-radius: .65rem; background: white; box-shadow: 0 1px 3px #0001; }
+        .card h2 { margin: 0 0 .25rem; overflow-wrap: anywhere; }
+        .meta { margin: .25rem 0 1rem; color: #626973; font-size: .9rem; }
+        form { margin-top: .75rem; }
+        input, button { box-sizing: border-box; width: 100%; padding: .65rem; border-radius: .35rem; border: 1px solid #bbc1c9; }
+        button { margin-top: .4rem; cursor: pointer; background: #263f73; color: white; border: 0; }
+        button.delete { background: #b42318; }
+    </style>
+</head>
+<body>
+    <header><h1>Development accounts</h1><a href="/">Back to game</a></header>
+    <p class="warning">Local DEBUG utility. Django passwords are one-way hashes, so existing passwords cannot be displayed.</p>
+
+    {% if messages %}<ul class="messages">{% for message in messages %}<li>{{ message }}</li>{% endfor %}</ul>{% endif %}
+
+    <main class="grid">
+        {% for account in users %}
+        <article class="card">
+            <h2>{{ account.username }}</h2>
+            <p class="meta">ID {{ account.pk }} · {% if account.has_usable_password %}Password configured{% else %}No usable password{% endif %}{% if account.is_superuser %} · Superuser{% endif %}</p>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="set_password">
+                <input type="hidden" name="user_id" value="{{ account.pk }}">
+                <label for="password-{{ account.pk }}">Set a new password</label>
+                <input id="password-{{ account.pk }}" name="new_password" type="password" required autocomplete="new-password">
+                <button type="submit">Update password</button>
+            </form>
+            <form method="post" onsubmit="return confirm('Delete {{ account.username|escapejs }}? This also deletes their saves and templates.');">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="user_id" value="{{ account.pk }}">
+                <button class="delete" type="submit">Delete account</button>
+            </form>
+        </article>
+        {% empty %}
+        <p>No registered users.</p>
+        {% endfor %}
+    </main>
+</body>
+</html>

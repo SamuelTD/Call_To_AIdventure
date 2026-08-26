@@ -6,7 +6,7 @@ from .views import (
     PlayPageView, CharacterCreatePageView, CurrentGameStateView, CombatPageView,
     CombatStateView, GameOverPageView, SignupView,
     SaveGameListView, LoadSaveGameView, DeleteSaveGameView,
-    VictoryPageView, CharacterCreationOptionsView,
+    VictoryPageView, CharacterCreationOptionsView, DevAccountDashboardView,
     CharacterTemplateListView, CharacterTemplateSaveView,
     CharacterTemplateDeleteView, CurrentRoomView)
 
@@ -17,6 +17,7 @@ urlpatterns = [
     path("play/", PlayPageView.as_view(), name="play"),
     path("health", HealthView.as_view(), name="health"),
     path("debug", DebugPageView.as_view(), name="debug"),
+    path("_dev/accounts/", DevAccountDashboardView.as_view(), name="dev_accounts"),
     path("api/adventures/", AdventureListView.as_view(), name="api_adventures"),
     path("api/character-options/", CharacterCreationOptionsView.as_view(), name="api_character_options"),
     path("api/character-templates/", CharacterTemplateListView.as_view(), name="api_character_templates"),
