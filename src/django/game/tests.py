@@ -11,6 +11,7 @@ from game.services.tools import ensure_goal_state, make_serializable_state
 from agents.game_master_graph import (
     normalize_damage_amount,
     normalize_heal_amount,
+    parse_thinker_action,
     retrieve_known_location_context,
     step_generate_story,
     step_agent_think,
@@ -36,6 +37,7 @@ from observability.metrics import (
     LLM_ATTEMPTS,
     LLM_REQUESTS,
     LLM_RETRIES,
+    STORY_TURN_READY_DURATION,
 )
 
 
@@ -1091,7 +1093,7 @@ class HealingToolTests(SimpleTestCase):
         self.assertEqual(unavailable._value.get(), unavailable_before + 1)
 
 
-class MetricsEndpointTests(SimpleTestCase):
+class MetricsEndpointTests(TestCase):
     def test_metrics_endpoint_exposes_application_metrics(self):
         response = self.client.get("/metrics")
         body = response.content.decode("utf-8")
@@ -1099,6 +1101,46 @@ class MetricsEndpointTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("aidventure_games_started_total", body)
         self.assertIn("django_http_requests_total", body)
+
+    def test_story_turn_metric_records_browser_duration_for_active_adventure(self):
+        session = self.client.session
+        session["game_state"] = {"adventure": {"id": "emerald_sword"}}
+        session.save()
+        metric = STORY_TURN_READY_DURATION.labels(adventure="emerald_sword")
+        count_before = sum(bucket.get() for bucket in metric._buckets)
+        sum_before = metric._sum.get()
+
+        response = self.client.post(
+            reverse("api_story_turn_metric"),
+            {"duration_seconds": 12.5},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            sum(bucket.get() for bucket in metric._buckets),
+            count_before + 1,
+        )
+        self.assertAlmostEqual(metric._sum.get(), sum_before + 12.5)
+
+    def test_story_turn_metric_rejects_invalid_or_sessionless_observations(self):
+        no_session_response = self.client.post(
+            reverse("api_story_turn_metric"),
+            {"duration_seconds": 2.5},
+            content_type="application/json",
+        )
+
+        session = self.client.session
+        session["game_state"] = {"adventure": {"id": "emerald_sword"}}
+        session.save()
+        invalid_response = self.client.post(
+            reverse("api_story_turn_metric"),
+            {"duration_seconds": 901},
+            content_type="application/json",
+        )
+
+        self.assertEqual(no_session_response.status_code, 400)
+        self.assertEqual(invalid_response.status_code, 400)
 
 
 class DamageToolTests(SimpleTestCase):
@@ -1125,6 +1167,30 @@ class DamageToolTests(SimpleTestCase):
         self.assertEqual(result["last_cmd"], "damage")
         self.assertEqual(result["damage_amount"], 5)
         self.assertEqual(result["heal_amount"], 0)
+
+    def test_parse_thinker_action_accepts_responses_api_content_blocks(self):
+        message = type("Message", (), {
+            "content": [
+                {"type": "reasoning", "summary": []},
+                {
+                    "type": "text",
+                    "text": '{"name":"nothing","arguments":{}}',
+                },
+            ]
+        })
+
+        self.assertEqual(parse_thinker_action(message), {"action": "nothing"})
+
+    def test_parse_thinker_action_accepts_native_tool_calls(self):
+        message = type("Message", (), {
+            "content": "",
+            "tool_calls": [{"name": "heal", "args": {"amount": 4}}],
+        })
+
+        self.assertEqual(
+            parse_thinker_action(message),
+            {"action": "heal", "amount": 4},
+        )
 
     @patch("agents.game_master_graph.build_thinker_agent")
     @patch("agents.game_master_graph.thinker_agent", None)

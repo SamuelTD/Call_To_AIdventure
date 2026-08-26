@@ -15,6 +15,13 @@ GAME_TURNS = Counter(
     ["mode"],
 )
 
+STORY_TURN_READY_DURATION = Histogram(
+    "aidventure_story_turn_ready_duration_seconds",
+    "Browser-observed time from submitting a story choice until choices are usable again",
+    ["adventure"],
+    buckets=(0.5, 1, 2, 5, 10, 20, 30, 45, 60, 90, 120, 300),
+)
+
 COMBATS_STARTED = Counter(
     "aidventure_combats_started_total",
     "Number of combats started",

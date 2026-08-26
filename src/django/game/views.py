@@ -22,10 +22,12 @@ from observability.metrics import (
     COMBATS_STARTED,
     GAMES_STARTED,
     GAME_TURNS,
+    STORY_TURN_READY_DURATION,
 )
 
 from uuid import uuid4
 import json
+import math
 from pathlib import Path
 
 # region HELPERS
@@ -305,6 +307,40 @@ class StepGameView(View):
             "choices": result["choices"],
             "player": player_sheet
         })
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class StoryTurnMetricView(View):
+    def post(self, request):
+        serialized_state = request.session.get("game_state")
+        if not serialized_state:
+            return JsonResponse({"error": "No active game"}, status=400)
+
+        try:
+            body = json.loads(request.body.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            return HttpResponseBadRequest("Invalid JSON")
+
+        duration_seconds = body.get("duration_seconds")
+        if (
+            isinstance(duration_seconds, bool)
+            or not isinstance(duration_seconds, (int, float))
+            or not math.isfinite(duration_seconds)
+            or duration_seconds <= 0
+            or duration_seconds > 900
+        ):
+            return JsonResponse(
+                {"error": "duration_seconds must be between 0 and 900"},
+                status=400,
+            )
+
+        adventure = serialized_state.get("adventure") or {}
+        adventure_id = adventure.get("id") or "unknown"
+        STORY_TURN_READY_DURATION.labels(adventure=adventure_id).observe(
+            duration_seconds
+        )
+
+        return JsonResponse({"ok": True})
 
 @method_decorator(csrf_exempt, name="dispatch")
 class CurrentRoomView(View):

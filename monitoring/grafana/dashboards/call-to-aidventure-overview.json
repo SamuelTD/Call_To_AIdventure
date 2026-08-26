@@ -160,6 +160,31 @@
       ],
       "title": "Combat outcomes",
       "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+      "id": 8,
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum(rate(aidventure_story_turn_ready_duration_seconds_bucket[$__rate_interval])) by (le, adventure))",
+          "legendFormat": "p50 / {{adventure}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum(rate(aidventure_story_turn_ready_duration_seconds_bucket[$__rate_interval])) by (le, adventure))",
+          "legendFormat": "p95 / {{adventure}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Story turn ready time",
+      "type": "timeseries"
     }
   ],
   "refresh": "15s",

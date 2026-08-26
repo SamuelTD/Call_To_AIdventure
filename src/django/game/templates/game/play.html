@@ -207,6 +207,7 @@
     <script>
         const API_STATE_URL = "{% url 'api_state' %}";
         const API_STEP_URL = "{% url 'api_step' %}";
+        const API_STORY_TURN_METRIC_URL = "{% url 'api_story_turn_metric' %}";
         const API_CURRENT_ROOM_URL = "{% url 'api_current_room' %}";
         const PLAY_URL = "{% url 'play' %}";
         const COMBAT_URL = "{% url 'combat' %}";
@@ -278,6 +279,21 @@
             }
         }
 
+        function recordStoryTurnDuration(durationSeconds) {
+            fetch(API_STORY_TURN_METRIC_URL, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    duration_seconds: durationSeconds
+                }),
+                keepalive: true
+            }).catch((err) => {
+                console.warn("Unable to record story-turn duration", err);
+            });
+        }
+
         async function loadState() {
             statusBox.textContent = "Loading current game...";
 
@@ -315,6 +331,8 @@
             statusBox.classList.remove("error");
             statusBox.textContent = "Advancing story...";
             nextBtn.disabled = true;
+            const turnStartedAt = performance.now();
+            let storyChoicesReady = false;
 
             try {
                 const response = await fetch(API_STEP_URL, {
@@ -355,6 +373,7 @@
 
                 storyBox.textContent = data.story || "";
                 renderChoices(data.choices || []);
+                storyChoicesReady = Array.isArray(data.choices) && data.choices.length > 0;
                 statusBox.textContent = "";
             } catch (err) {
                 console.error(err);
@@ -362,6 +381,11 @@
                 statusBox.classList.add("error");
             } finally {
                 nextBtn.disabled = false;
+                if (storyChoicesReady) {
+                    recordStoryTurnDuration(
+                        (performance.now() - turnStartedAt) / 1000
+                    );
+                }
             }
         });
 

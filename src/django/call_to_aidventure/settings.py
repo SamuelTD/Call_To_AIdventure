@@ -33,7 +33,7 @@ ALLOWED_HOSTS = [
     host.strip()
     for host in os.getenv(
         "DJANGO_ALLOWED_HOSTS",
-        "localhost,127.0.0.1,host.docker.internal",
+        "localhost,127.0.0.1,0.0.0.0,host.docker.internal",
     ).split(",")
     if host.strip()
 ]

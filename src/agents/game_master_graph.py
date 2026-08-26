@@ -103,6 +103,47 @@ def initialize_graph_runtime(state: GameState) -> None:
 def prompt_fn(state: AgentState) -> list[SystemMessage | HumanMessage]:
     sys = SystemMessage(content=instruction)
     return [sys, *state["messages"]]
+
+
+def parse_thinker_action(message) -> dict:
+    """Normalize tool output from both Chat Completions and Responses API messages."""
+    tool_calls = getattr(message, "tool_calls", None) or []
+    if tool_calls:
+        call = tool_calls[-1]
+        name = call.get("name") if isinstance(call, dict) else getattr(call, "name", None)
+        args = call.get("args", {}) if isinstance(call, dict) else getattr(call, "args", {})
+        if isinstance(args, str):
+            args = json.loads(args)
+        return {"action": name, **(args or {})}
+
+    content = message.content
+    if isinstance(content, list):
+        text_parts = []
+        for block in content:
+            if isinstance(block, dict):
+                text = block.get("text")
+            else:
+                text = getattr(block, "text", None)
+            if text:
+                text_parts.append(text)
+        content = "".join(text_parts)
+
+    if not isinstance(content, str):
+        raise ValueError(f"Unsupported thinker response content: {type(content).__name__}")
+
+    content = content.strip()
+    match = re.fullmatch(r'<function=(?P<name>\w+)(?P<args>\{.*?\})</function>', content)
+    if match:
+        name, raw_args = match.groups()
+        return {"action": name, **json.loads(raw_args)}
+
+    payload = json.loads(content)
+    if "name" in payload:
+        args = payload.get("arguments", {})
+        if isinstance(args, str):
+            args = json.loads(args)
+        return {"action": payload["name"], **(args or {})}
+    return payload
 #endregion
 
 
@@ -343,16 +384,7 @@ def step_agent_think(state: GameState) -> GameState:
         {"messages": [sys_msg, human_msg]},
         call_name="agent thinking",
     )
-    content = resp["messages"][-1].content
-    print("DEBUG THINKER RAW =", content)
-
-    m = re.match(r'^<function=(?P<name>\w+)(?P<args>\{.*?\})</function>$', content)
-    if not m:
-        tool_msg = json.loads(content)
-    else:
-        name, raw_args = m.groups()
-        args = json.loads(raw_args)
-        tool_msg = {"action": name, **args}
+    tool_msg = parse_thinker_action(resp["messages"][-1])
 
     action = tool_msg.get("action")
     if action == "deal_damage":

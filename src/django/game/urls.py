@@ -8,7 +8,7 @@ from .views import (
     SaveGameListView, LoadSaveGameView, DeleteSaveGameView,
     VictoryPageView, CharacterCreationOptionsView, DevAccountDashboardView,
     CharacterTemplateListView, CharacterTemplateSaveView,
-    CharacterTemplateDeleteView, CurrentRoomView)
+    CharacterTemplateDeleteView, CurrentRoomView, StoryTurnMetricView)
 
 urlpatterns = [
     path("", LandingPageView.as_view(), name="landing"),
@@ -29,6 +29,7 @@ urlpatterns = [
     path("api/play", PlayView.as_view(), name="api_play"),
     path("api/start", StartGameView.as_view(), name="api_start"),
     path("api/step", StepGameView.as_view(), name="api_step"),
+    path("api/metrics/story-turn", StoryTurnMetricView.as_view(), name="api_story_turn_metric"),
     path("api/current-room", CurrentRoomView.as_view(), name="api_current_room"),
     path("api/combat/start", StartCombatView.as_view(), name="api_combat_start"),
     path("api/combat/action", CombatActionView.as_view(), name="api_combat_action"),

@@ -60,6 +60,14 @@ histogram_quantile(
 sum(rate(aidventure_llm_requests_total[5m])) by (operation, status)
 ```
 
+```promql
+histogram_quantile(
+  0.95,
+  sum(rate(aidventure_story_turn_ready_duration_seconds_bucket[5m]))
+    by (le, adventure)
+)
+```
+
 To inspect the application metrics directly:
 
 ```bash
@@ -76,6 +84,11 @@ IDs, exception messages, or other unbounded/private values as labels.
 The LLM duration histogram includes retry delays, so it represents the latency
 experienced by the game. `aidventure_llm_attempts_total` counts provider calls,
 while `aidventure_llm_requests_total` counts logical operations.
+
+`aidventure_story_turn_ready_duration_seconds` is measured in the browser from
+submitting a choice with **Next** until the next set of story choices is rendered
+and usable. It includes server processing, LLM calls, network transit, and browser
+work. Combat transitions, endings, and failed turns are excluded.
 
 ## Stop or reset
 
