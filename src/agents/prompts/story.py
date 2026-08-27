@@ -15,7 +15,11 @@ def build_pre_combat_fluff_prompt(
     latest_user: str,
     monster_name: str,
     rag_context: str,
+    language: str = "en",
 ) -> str:
+    if language == "fr":
+        from .story_fr import build_pre_combat_fluff_prompt as build_fr
+        return build_fr(current_story, latest_user, monster_name, rag_context)
     return f"""
 You are a game master for a fantasy role playing game. Your role is to write short (2-3 sentences maximum)
 descriptive scenes that will precede a combat.
@@ -36,7 +40,11 @@ def build_post_combat_story_prompt(
     gold_loot: int,
     item_loot,
     rag_context: str,
+    language: str = "en",
 ) -> str:
+    if language == "fr":
+        from .story_fr import build_post_combat_story_prompt as build_fr
+        return build_fr(player_summary, chat_history, enemy, gold_loot, item_loot, rag_context)
     return f"""
 Here are the informations on the user :
 {player_summary}
@@ -66,7 +74,11 @@ def build_post_heal_story_prompt(
     current_hp: int,
     max_hp: int,
     rag_context: str,
+    language: str = "en",
 ) -> str:
+    if language == "fr":
+        from .story_fr import build_post_heal_story_prompt as build_fr
+        return build_fr(player_summary, chat_history, latest_user, requested_heal_amount, actual_heal_amount, current_hp, max_hp, rag_context)
     return f"""
 Here are the informations on the user :
 {player_summary}
@@ -98,7 +110,11 @@ def build_post_damage_story_prompt(
     max_hp: int,
     player_has_died: bool,
     rag_context: str,
+    language: str = "en",
 ) -> str:
+    if language == "fr":
+        from .story_fr import build_post_damage_story_prompt as build_fr
+        return build_fr(player_summary, chat_history, latest_user, requested_damage_amount, actual_damage_amount, current_hp, max_hp, player_has_died, rag_context)
     death_instruction = (
         "The damage reduced the player to 0 HP. Make this a clear death or collapse scene, but do not offer choices or continue beyond the moment."
         if player_has_died
@@ -133,7 +149,11 @@ def build_regular_story_prompt(
     chat_history: str,
     latest_user: str,
     rag_context: str,
+    language: str = "en",
 ) -> str:
+    if language == "fr":
+        from .story_fr import build_regular_story_prompt as build_fr
+        return build_fr(player_summary, chat_history, latest_user, rag_context)
     return f"""
 Here are the informations on the user :
 {player_summary}
@@ -157,7 +177,11 @@ def build_current_room_prompt(
     player_summary: str,
     current_story: str,
     rag_context: str,
+    language: str = "en",
 ) -> str:
+    if language == "fr":
+        from .story_fr import build_current_room_prompt as build_fr
+        return build_fr(player_summary, current_story, rag_context)
     return f"""
 Here are the informations on the user:
 {player_summary}
@@ -185,7 +209,11 @@ def build_room_completion_prompt(
     chat_history: str,
     latest_user: str,
     current_story: str,
+    language: str = "en",
 ) -> str:
+    if language == "fr":
+        from .story_fr import build_room_completion_prompt as build_fr
+        return build_fr(player_summary, current_location_id, room_objective, room_signals, chat_history, latest_user, current_story)
     signals = "\n".join(f"- {signal}" for signal in room_signals) or "- None"
 
     return f"""
@@ -223,7 +251,11 @@ def build_room_arrival_prompt(
     previous_location_id: str,
     next_location_id: str,
     rag_context: str,
+    language: str = "en",
 ) -> str:
+    if language == "fr":
+        from .story_fr import build_room_arrival_prompt as build_fr
+        return build_fr(player_summary, previous_story, previous_location_id, next_location_id, rag_context)
     return f"""
 Here are the informations on the user:
 {player_summary}
@@ -253,7 +285,11 @@ def build_goal_evaluation_prompt(
     latest_user: str,
     current_story: str,
     ongoing_goals: list[str],
+    language: str = "en",
 ) -> str:
+    if language == "fr":
+        from .story_fr import build_goal_evaluation_prompt as build_fr
+        return build_fr(player_summary, chat_history, latest_user, current_story, ongoing_goals)
     goals = "\n".join(f"- {goal}" for goal in ongoing_goals)
 
     return f"""
@@ -286,7 +322,11 @@ def build_victory_wrapup_prompt(
     latest_user: str,
     current_story: str,
     finished_goals: list[str],
+    language: str = "en",
 ) -> str:
+    if language == "fr":
+        from .story_fr import build_victory_wrapup_prompt as build_fr
+        return build_fr(player_summary, chat_history, latest_user, current_story, finished_goals)
     goals = "\n".join(f"- {goal}" for goal in finished_goals)
 
     return f"""

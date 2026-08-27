@@ -13,6 +13,8 @@ from agents.prompts import (
     CHOOSER_TEMPLATE,
     SUMMARY_TEMPLATE,
 )
+from agents.prompts.chooser import CHOOSER_TEMPLATE_FR
+from agents.prompts.summary import SUMMARY_TEMPLATE_FR
 from agents.llm_resilience import get_llm_setting
 
 load_dotenv()
@@ -34,9 +36,11 @@ base_story_template = ChatPromptTemplate.from_template("{full_prompt}")
 story_chain = base_story_template | llm | StrOutputParser()
 
 summary_chain = SUMMARY_TEMPLATE | llm | StrOutputParser()
+summary_chain_fr = SUMMARY_TEMPLATE_FR | llm | StrOutputParser()
 
 choicer_model = llm.with_structured_output(ChoiceOutput)
 choicer_chain = CHOOSER_TEMPLATE | choicer_model
+choicer_chain_fr = CHOOSER_TEMPLATE_FR | choicer_model
 
 goal_evaluator_model = llm.with_structured_output(GoalEvaluationOutput)
 goal_evaluator_chain = base_story_template | goal_evaluator_model

@@ -32,6 +32,7 @@ FR = {
     "Failed to delete template": "Impossible de supprimer le modèle", "Failed to load character templates": "Impossible de charger les modèles",
     "Play": "Jouer", "Back to landing": "Retour à l'accueil", "Loading adventure...": "Chargement de l'aventure...",
     "What do you do?": "Que faites-vous ?", "Next": "Suivant", "Check current room": "Examiner la pièce actuelle",
+    "Current room": "Pièce actuelle",
     "Character Sheet": "Fiche de personnage", "Identity": "Identité", "Stats": "Caractéristiques", "Equipment": "Équipement",
     "Inventory": "Inventaire", "Gold": "Or", "Weapon": "Arme", "Player HP": "PV du joueur", "Enemy HP": "PV de l'ennemi",
     "No choices available.": "Aucun choix disponible.", "None": "Aucun",

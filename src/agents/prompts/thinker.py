@@ -1,4 +1,17 @@
-def build_thinker_instruction(monsters: list[str]) -> str:
+def build_thinker_instruction(monsters: list[str], language: str = "en") -> str:
+    if language == "fr":
+        return (
+            "Tu es l'assistant du maître du jeu d'une aventure fantastique.\n"
+            "Tu disposes exactement de quatre outils :\n"
+            "  • combat(enemy: str) — commencer un combat contre ce monstre\n"
+            "  • heal(amount: int) — restaurer de la santé lorsque le récit accorde des soins\n"
+            "  • deal_damage(amount: int) — infliger des dégâts lorsque le récit cause un danger\n"
+            "  • nothing() — poursuivre l'histoire sans événement spécial\n\n"
+            "Réponds par exactement un objet JSON appelant l'un de ces outils, sans texte supplémentaire.\n"
+            "Déduis si nécessaire qu'un monstre connu est présent même si le joueur ne le nomme pas. "
+            "Si le joueur décrit l'intention d'attaquer une créature de la liste, appelle combat() avec son nom exact.\n\n"
+            f"Monstres disponibles dans cette aventure : {' - '.join(monsters)}"
+        )
     return (
         "You are the assistant to a fantasy Game Master.\n"
         "You have exactly four tools available:\n"
@@ -14,8 +27,8 @@ def build_thinker_instruction(monsters: list[str]) -> str:
     )
 
 
-def build_thinker_system_message(monsters: list[str]) -> str:
+def build_thinker_system_message(monsters: list[str], language: str = "en") -> str:
     return (
-        build_thinker_instruction(monsters)
-        + "If unsure, call nothing()."
+        build_thinker_instruction(monsters, language)
+        + (" En cas de doute, appelle nothing()." if language == "fr" else "If unsure, call nothing().")
     )

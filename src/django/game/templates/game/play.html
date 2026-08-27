@@ -27,6 +27,12 @@
             font-size: 2rem;
         }
 
+        .room-label {
+            margin: 6px 0 0;
+            color: #b8a7ff;
+            font-size: 1rem;
+        }
+
         .layout {
             display: grid;
             grid-template-columns: 3fr 1fr;
@@ -154,6 +160,7 @@
 
         <div class="title-bar">
             <h1 id="adventure-title">{% ui "Loading adventure..." %}</h1>
+            <p id="room-label" class="room-label" hidden><strong>{% ui "Current room" %}:</strong> <span id="room-name"></span></p>
         </div>
 
         <div class="layout">
@@ -219,6 +226,8 @@
         const VICTORY_URL = "{% url 'victory' %}";
 
         const titleEl = document.getElementById("adventure-title");
+        const roomLabel = document.getElementById("room-label");
+        const roomName = document.getElementById("room-name");
         const storyBox = document.getElementById("story-box");
         const choicesContainer = document.getElementById("choices-container");
         const choiceForm = document.getElementById("choice-form");
@@ -283,6 +292,11 @@
             }
         }
 
+        function renderRoom(name) {
+            roomName.textContent = name || "";
+            roomLabel.hidden = !name;
+        }
+
         function recordStoryTurnDuration(durationSeconds) {
             fetch(API_STORY_TURN_METRIC_URL, {
                 method: "POST",
@@ -310,6 +324,7 @@
                 }
 
                 titleEl.textContent = data.adventure_name || T.adventure;
+                renderRoom(data.current_room_name);
                 storyBox.textContent = data.story || "";
                 renderChoices(data.choices || []);
                 renderPlayer(data.player || {});
@@ -358,6 +373,8 @@
                 if (data.player) {
                     renderPlayer(data.player);
                 }
+
+                renderRoom(data.current_room_name);
 
                 if (data.mode === "combat") {
                     sessionStorage.setItem("combat_fluff", data.combat_fluff || "");
@@ -417,6 +434,8 @@
                 if (data.player) {
                     renderPlayer(data.player);
                 }
+
+                renderRoom(data.current_room_name);
 
                 storyBox.textContent = data.story || "";
                 renderChoices(data.choices || []);

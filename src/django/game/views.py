@@ -35,6 +35,13 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SYSTEM_TEMPLATE_USER_ID = -1
 
+
+def apply_request_language(request, state):
+    state["language"] = (
+        "fr" if str(getattr(request, "LANGUAGE_CODE", "en")).lower().startswith("fr") else "en"
+    )
+    return state
+
 def build_character_sheet(player):
     inv = player.inventory if player.inventory else []
     inventory_md = "\n".join([f"- {item}" for item in inv]) if inv else "*None*"
@@ -51,6 +58,19 @@ def build_character_sheet(player):
         "inventory": inv,
         "inventory_markdown": inventory_md,
     }
+
+def build_current_room_name(state):
+    location_id = state.get("current_location_id")
+    if not location_id:
+        return ""
+
+    location_path = PROJECT_ROOT / "data" / "world" / "locations" / f"{location_id}.json"
+    try:
+        location = json.loads(location_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return location_id.replace("_", " ").title()
+
+    return location.get("name") or location_id.replace("_", " ").title()
 
 def build_combat_state_payload(state):
     player = state["player"]
@@ -203,7 +223,11 @@ class StartGameView(View):
             return JsonResponse({"error": ui_text(str(exc))}, status=400)
 
         try:
-            state, intro, adventure = initialize_game(adventure_id, player)
+            state, intro, adventure = initialize_game(
+                adventure_id,
+                player,
+                getattr(request, "LANGUAGE_CODE", "en"),
+            )
         except StopIteration:
             return JsonResponse({"error": ui_text("Unknown adventure_id")}, status=404)
 
@@ -247,7 +271,7 @@ class StepGameView(View):
             return JsonResponse({"error": ui_text("No active game")}, status=400)
 
         # Rebuild runtime objects
-        state = rebuild_state(serialized_state)
+        state = apply_request_language(request, rebuild_state(serialized_state))
 
         # Run engine step
         engine = get_engine()
@@ -306,7 +330,8 @@ class StepGameView(View):
             "mode": "story",
             "story": result["story"],
             "choices": result["choices"],
-            "player": player_sheet
+            "player": player_sheet,
+            "current_room_name": build_current_room_name(state),
         })
 
 
@@ -352,7 +377,7 @@ class CurrentRoomView(View):
         if not serialized_state:
             return JsonResponse({"error": ui_text("No active game")}, status=400)
 
-        state = rebuild_state(serialized_state)
+        state = apply_request_language(request, rebuild_state(serialized_state))
         engine = get_engine()
         result = engine.check_current_room(state)
 
@@ -375,6 +400,7 @@ class CurrentRoomView(View):
             "story": result["story"],
             "choices": result["choices"],
             "player": player_sheet,
+            "current_room_name": build_current_room_name(result["state"]),
         })
 
 @method_decorator(csrf_exempt, name="dispatch")
@@ -725,4 +751,5 @@ class CurrentGameStateView(View):
             "choices": state.get("current_choices", []),
             "player": player_sheet,
             "adventure_name": state["adventure"].name if state.get("adventure") else "Adventure",
+            "current_room_name": build_current_room_name(state),
         })

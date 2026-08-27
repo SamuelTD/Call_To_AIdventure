@@ -22,6 +22,8 @@ from agents.game_master_graph import (
 )
 from agents.llm_resilience import TemporaryLLMServiceError
 from agents.tools import deal_damage_tool, heal_tool, tools
+from agents.prompts import build_regular_story_prompt, build_thinker_system_message
+from agents.prompts.chooser import CHOOSER_TEMPLATE_FR
 from retrieval.service import (
     clear_retrieval_cache,
     retrieve_location_context,
@@ -111,6 +113,37 @@ class InterfaceLanguageTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"], "Aucune partie active")
+
+
+class FrenchAgentPromptTests(SimpleTestCase):
+    def test_french_story_prompt_requires_french_second_person_narration(self):
+        prompt = build_regular_story_prompt(
+            "Name: Stan",
+            "Une porte s'ouvre.",
+            "Entrer",
+            "Aucune connaissance",
+            language="fr",
+        )
+
+        self.assertIn("poursuis l'histoire en français", prompt)
+        self.assertIn("deuxième personne du pluriel", prompt)
+
+    def test_french_chooser_requests_exactly_three_french_actions(self):
+        prompt = CHOOSER_TEMPLATE_FR.format(
+            player_summary="Stan",
+            context="Une porte s'ouvre.",
+            rag_context="Aucun",
+            last_choices="Aucun",
+        )
+
+        self.assertIn("exactement trois actions possibles en français", prompt)
+
+    def test_french_thinker_keeps_internal_tool_names(self):
+        prompt = build_thinker_system_message(["Goblin Warrior"], language="fr")
+
+        self.assertIn("Tu es l'assistant du maître du jeu", prompt)
+        self.assertIn("combat(enemy: str)", prompt)
+        self.assertIn("nothing()", prompt)
 
 
 def make_game_state():
@@ -591,6 +624,24 @@ class CharacterTemplateTests(TestCase):
 
 
 class SaveGamePersistenceTests(TestCase):
+    def test_current_game_state_includes_current_room_name(self):
+        state = make_game_state()
+        state["current_location_id"] = "tomb_dragonkin_sealed_gate"
+        session = self.client.session
+        session["game_state"] = make_serializable_state(state)
+        session.save()
+
+        response = self.client.get(reverse("api_state"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["current_room_name"], "Sealed Gate of Dragonkin")
+
+    def test_play_page_contains_current_room_label(self):
+        response = self.client.get(reverse("play"))
+
+        self.assertContains(response, 'id="room-label"')
+        self.assertContains(response, "Current room")
+
     def test_goal_state_backfill_uses_unfinished_adventure_goals(self):
         state = {
             "adventure": make_adventure(),

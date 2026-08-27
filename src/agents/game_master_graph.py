@@ -33,6 +33,8 @@ from agents.llm_runtime import (
     choicer_chain,
     goal_evaluator_chain,
     room_completion_chain,
+    summary_chain_fr,
+    choicer_chain_fr,
     build_thinker_agent,
 )
 from agents.llm_resilience import invoke_llm_with_retries
@@ -58,6 +60,7 @@ EMBEDDING_MODEL = "mxbai-embed-large:latest"
 
 #region STATE SCHEMA
 class GameState(TypedDict, total=False):
+    language: str
     player: Player
     adventure: Adventure
     history: list[str]
@@ -96,7 +99,10 @@ thinker_agent = None
 def initialize_graph_runtime(state: GameState) -> None:
     global instruction, thinker_agent
 
-    instruction = build_thinker_instruction(state["adventure"].monsters)
+    instruction = build_thinker_instruction(
+        state["adventure"].monsters,
+        state.get("language", "en"),
+    )
 
     thinker_agent = build_thinker_agent()
 
@@ -199,12 +205,13 @@ def make_choice(
     player_summary: str,
     previous_choices: list[str],
     rag_context: str,
+    language: str = "en",
 ) -> list[str]:
     context = "\n".join(history)
     last_choices = " - ".join(previous_choices) if previous_choices else "None"
 
     result = invoke_llm_with_retries(
-        choicer_chain.invoke,
+        (choicer_chain_fr if language == "fr" else choicer_chain).invoke,
         {
             "context": context,
             "player_summary": player_summary,
@@ -217,14 +224,14 @@ def make_choice(
     print("DEBUG CHOICES ==", result)
     return result.choices
 
-def compress_history(history: list[str]) -> list[str]:
+def compress_history(history: list[str], language: str = "en") -> list[str]:
     if len(history) <= 6:
         return history
 
     to_summarize = "\n".join(history[:-4])
     try:
         summary = invoke_llm_with_retries(
-            summary_chain.invoke,
+            (summary_chain_fr if language == "fr" else summary_chain).invoke,
             {"context": to_summarize},
             call_name="history compression",
         ).strip()
@@ -322,14 +329,15 @@ def next_location_id(state: GameState) -> str | None:
 
 #region STEP FUNCTIONS
 def step_get_input(state: GameState) -> GameState:
+    language = state.get("language", "en")
     if state.get("should_end"):
         return {
-            "current_choices": ["Continue."],
+            "current_choices": ["Continuer." if language == "fr" else "Continue."],
         }
 
     if state.get("after_combat"):
         return {
-            "current_choices": ["Go onward."],
+            "current_choices": ["Poursuivre." if language == "fr" else "Go onward."],
             "after_combat": False,
         }
 
@@ -347,14 +355,13 @@ def step_get_input(state: GameState) -> GameState:
             state["player"].get_summary(),
             state.get("last_choices", []),
             rag_context,
+            language,
         )
     except Exception as e:
         print("ERROR:", e)
-        choices = [
-            "Move forward carefully",
-            "Examine the surroundings",
-            "Prepare for danger",
-        ]
+        choices = (["Avancer prudemment", "Examiner les environs", "Se préparer au danger"] if language == "fr" else [
+            "Move forward carefully", "Examine the surroundings", "Prepare for danger",
+        ])
 
     return {
         "current_choices": choices,
@@ -370,12 +377,14 @@ def step_agent_think(state: GameState) -> GameState:
     if thinker_agent is None:
         initialize_graph_runtime(state)
 
-    sys_msg = SystemMessage(content=build_thinker_system_message(state["adventure"].monsters))
+    language = state.get("language", "en")
+    sys_msg = SystemMessage(content=build_thinker_system_message(state["adventure"].monsters, language))
 
     human_msg = HumanMessage(
         content=(
-            f"Context:\n{state.get('current_story', '')}\n\n"
-            f"Player input:\n{state.get('latest_user', '')}\n"
+            (f"Contexte :\n{state.get('current_story', '')}\n\nAction du joueur :\n{state.get('latest_user', '')}\n")
+            if language == "fr" else
+            (f"Context:\n{state.get('current_story', '')}\n\nPlayer input:\n{state.get('latest_user', '')}\n")
         )
     )
 
@@ -413,6 +422,7 @@ def step_prepare_combat(state: GameState) -> GameState:
         state["latest_user"],
         state["current_monster_name"],
         rag_context,
+        state.get("language", "en"),
     )
     fluff = invoke_llm_with_retries(
         story_chain.invoke,
@@ -432,6 +442,7 @@ def describe_current_room(state: GameState) -> str:
         player_summary=state["player"].get_summary(),
         current_story=state.get("current_story", ""),
         rag_context=rag_context,
+        language=state.get("language", "en"),
     )
     return invoke_llm_with_retries(
         story_chain.invoke,
@@ -452,7 +463,7 @@ def step_evaluate_room_progression(state: GameState) -> GameState:
     if not location or not location.completion.objective:
         return {}
 
-    history = compress_history(state.get("history", []))
+    history = compress_history(state.get("history", []), state.get("language", "en"))
     prompt = build_room_completion_prompt(
         player_summary=state["player"].get_summary(),
         current_location_id=location_id,
@@ -461,6 +472,7 @@ def step_evaluate_room_progression(state: GameState) -> GameState:
         chat_history="\n".join(history),
         latest_user=state.get("latest_user", ""),
         current_story=state.get("current_story", ""),
+        language=state.get("language", "en"),
     )
 
     try:
@@ -502,6 +514,7 @@ def step_evaluate_room_progression(state: GameState) -> GameState:
         previous_location_id=location_id,
         next_location_id=next_id,
         rag_context=rag_context,
+        language=state.get("language", "en"),
     )
     arrival_story = invoke_llm_with_retries(
         story_chain.invoke,
@@ -519,7 +532,7 @@ def step_evaluate_room_progression(state: GameState) -> GameState:
 
 
 def step_generate_story(state: GameState) -> GameState:
-    history = compress_history(state["history"])
+    history = compress_history(state["history"], state.get("language", "en"))
     player_summary = state["player"].get_summary()
     chat_hist = "\n".join(history)
     q = state["latest_user"]
@@ -550,6 +563,7 @@ def step_generate_story(state: GameState) -> GameState:
             gold_loot=gold_loot,
             item_loot=item_loot,
             rag_context=rag_context,
+            language=state.get("language", "en"),
         )
 
         state_updates.update({
@@ -578,6 +592,7 @@ def step_generate_story(state: GameState) -> GameState:
             current_hp=next_hp,
             max_hp=state["player"].max_hp,
             rag_context=rag_context,
+            language=state.get("language", "en"),
         )
 
         state_updates.update({
@@ -603,6 +618,7 @@ def step_generate_story(state: GameState) -> GameState:
             max_hp=state["player"].max_hp,
             player_has_died=player_has_died,
             rag_context=rag_context,
+            language=state.get("language", "en"),
         )
 
         state_updates.update({
@@ -620,6 +636,7 @@ def step_generate_story(state: GameState) -> GameState:
             chat_history=chat_hist,
             latest_user=q,
             rag_context=rag_context,
+            language=state.get("language", "en"),
         )
     
     story = invoke_llm_with_retries(
@@ -656,13 +673,14 @@ def step_evaluate_goals(state: GameState) -> GameState:
             "adventure_completed": True,
         }
 
-    history = compress_history(state.get("history", []))
+    history = compress_history(state.get("history", []), state.get("language", "en"))
     prompt = build_goal_evaluation_prompt(
         player_summary=state["player"].get_summary(),
         chat_history="\n".join(history),
         latest_user=state.get("latest_user", ""),
         current_story=state.get("current_story", ""),
         ongoing_goals=ongoing_goals,
+        language=state.get("language", "en"),
     )
 
     try:
@@ -697,13 +715,14 @@ def step_evaluate_goals(state: GameState) -> GameState:
     }
 
 def step_generate_victory_wrapup(state: GameState) -> GameState:
-    history = compress_history(state.get("history", []))
+    history = compress_history(state.get("history", []), state.get("language", "en"))
     prompt = build_victory_wrapup_prompt(
         player_summary=state["player"].get_summary(),
         chat_history="\n".join(history),
         latest_user=state.get("latest_user", ""),
         current_story=state.get("current_story", ""),
         finished_goals=list(state.get("finished_goals") or []),
+        language=state.get("language", "en"),
     )
 
     story = invoke_llm_with_retries(
@@ -715,7 +734,7 @@ def step_generate_victory_wrapup(state: GameState) -> GameState:
     return {
         "history": history + [f"Story: {story}"],
         "current_story": story,
-        "current_choices": ["Continue."],
+        "current_choices": ["Continuer." if state.get("language") == "fr" else "Continue."],
         "should_end": True,
         "end_reason": "victory",
         "adventure_completed": True,

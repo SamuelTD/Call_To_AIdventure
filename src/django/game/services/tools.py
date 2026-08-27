@@ -64,6 +64,7 @@ def rebuild_state(serialized_state: dict) -> dict:
     if state.get("current_monster"):
         state["current_monster"] = Monster.from_dict(state["current_monster"])
 
+    state.setdefault("language", "en")
     return ensure_room_state(ensure_goal_state(state))
 
 def persist_game(
@@ -114,12 +115,13 @@ def persist_game(
     request.session.modified = True
     return serializable_state, save
 
-def initialize_game(adventure_id: str, player: Player):
+def initialize_game(adventure_id: str, player: Player, language: str = "en"):
     adventures = load_all_adventures()
     adventure = next(a for a in adventures if a.id == adventure_id)
     intro = load_adv_intro(adventure_id)
 
     state = {
+        "language": "fr" if str(language).lower().startswith("fr") else "en",
         "player": player,
         "adventure": adventure,
         "history": [intro],
