@@ -89,6 +89,30 @@ def make_character_payload():
     }
 
 
+@override_settings(ALLOWED_HOSTS=["testserver"])
+class InterfaceLanguageTests(TestCase):
+    def test_language_toggle_sets_cookie_and_translates_landing_page(self):
+        response = self.client.post(
+            reverse("set_language"),
+            {"language": "fr", "next": reverse("landing")},
+        )
+
+        self.assertRedirects(response, reverse("landing"))
+        self.assertEqual(self.client.cookies["django_language"].value, "fr")
+
+        response = self.client.get(reverse("landing"))
+        self.assertContains(response, "Commencer une nouvelle aventure")
+        self.assertContains(response, 'lang="fr"')
+
+    def test_french_api_errors_are_localized(self):
+        self.client.cookies["django_language"] = "fr"
+
+        response = self.client.get(reverse("api_state"))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "Aucune partie active")
+
+
 def make_game_state():
     adventure = make_adventure()
     return {

@@ -1,9 +1,10 @@
+{% load ui_i18n %}{% load i18n %}{% get_current_language as LANGUAGE_CODE %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Development accounts</title>
+    <title>{% ui "Development accounts" %}</title>
     <style>
         body { font: 16px/1.45 system-ui, sans-serif; margin: 2rem; color: #20242a; background: #f5f6f8; }
         header { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
@@ -21,7 +22,7 @@
     </style>
 </head>
 <body>
-    <header><h1>Development accounts</h1><a href="/">Back to game</a></header>
+    <header><h1>{% ui "Development accounts" %}</h1><a href="/">{% ui "Back to game" %}</a></header>
     <p class="warning">Local DEBUG utility. Django passwords are one-way hashes, so existing passwords cannot be displayed.</p>
 
     {% if messages %}<ul class="messages">{% for message in messages %}<li>{{ message }}</li>{% endfor %}</ul>{% endif %}
@@ -35,20 +36,21 @@
                 {% csrf_token %}
                 <input type="hidden" name="action" value="set_password">
                 <input type="hidden" name="user_id" value="{{ account.pk }}">
-                <label for="password-{{ account.pk }}">Set a new password</label>
+                <label for="password-{{ account.pk }}">{% ui "Set a new password" %}</label>
                 <input id="password-{{ account.pk }}" name="new_password" type="password" required autocomplete="new-password">
-                <button type="submit">Update password</button>
+                <button type="submit">{% ui "Update password" %}</button>
             </form>
             <form method="post" onsubmit="return confirm('Delete {{ account.username|escapejs }}? This also deletes their saves and templates.');">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="user_id" value="{{ account.pk }}">
-                <button class="delete" type="submit">Delete account</button>
+                <button class="delete" type="submit">{% ui "Delete account" %}</button>
             </form>
         </article>
         {% empty %}
         <p>No registered users.</p>
         {% endfor %}
     </main>
+    {% include "game/_language_toggle.html" %}
 </body>
 </html>

@@ -1,5 +1,6 @@
+{% load ui_i18n %}{% load i18n %}{% get_current_language as LANGUAGE_CODE %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
     <meta charset="UTF-8">
     <title>Call To AIdventure</title>
@@ -235,63 +236,72 @@
                         <span>{{ user.username }}</span>
                         <form class="logout-form" method="post" action="{% url 'logout' %}">
                             {% csrf_token %}
-                            <button class="logout-button" type="submit">Log Out</button>
+                            <button class="logout-button" type="submit">{% ui "Log Out" %}</button>
                         </form>
                     {% else %}
-                        <a class="account-link" href="{% url 'login' %}">Log In</a>
-                        <a class="account-link" href="{% url 'signup' %}">Create Account</a>
+                        <a class="account-link" href="{% url 'login' %}">{% ui "Log In" %}</a>
+                        <a class="account-link" href="{% url 'signup' %}">{% ui "Create Account" %}</a>
                     {% endif %}
                 </div>
             </div>
 
             {% if user.is_authenticated %}
-                <div class="save-tabs" role="tablist" aria-label="Saved games">
-                    <button id="new-adventure-tab" class="tab-btn active" type="button">New Adventure</button>
-                    <button id="active-saves-tab" class="tab-btn" type="button">Continue Adventure</button>
-                    <button id="history-saves-tab" class="tab-btn" type="button">History</button>
+                <div class="save-tabs" role="tablist" aria-label="{% ui 'Saved games' %}">
+                    <button id="new-adventure-tab" class="tab-btn active" type="button">{% ui "New Adventure" %}</button>
+                    <button id="active-saves-tab" class="tab-btn" type="button">{% ui "Continue Adventure" %}</button>
+                    <button id="history-saves-tab" class="tab-btn" type="button">{% ui "History" %}</button>
                 </div>
 
                 <div id="active-saves-panel" class="hidden">
                     <div id="saved-games" class="saved-games"></div>
-                    <div id="saved-games-empty" class="empty-saves hidden">No saved games yet.</div>
+                    <div id="saved-games-empty" class="empty-saves hidden">{% ui "No saved games yet." %}</div>
                 </div>
 
                 <div id="new-adventure-panel">
-                    <label for="adventure-select">Choose an adventure</label>
+                    <label for="adventure-select">{% ui "Choose an adventure" %}</label>
                     <select id="adventure-select">
-                        <option value="">Loading adventures...</option>
+                        <option value="">{% ui "Loading adventures..." %}</option>
                     </select>
 
                     <div id="intro-box" class="intro-box">
-                        Select an adventure to see its introduction.
+                        {% ui "Select an adventure to see its introduction." %}
                     </div>
 
-                    <button id="start-btn" class="hidden">Start Adventure</button>
+                    <button id="start-btn" class="hidden">{% ui "Start Adventure" %}</button>
                 </div>
 
                 <div id="history-saves-panel" class="hidden">
                     <div id="history-games" class="saved-games"></div>
-                    <div id="history-games-empty" class="empty-saves hidden">No finished adventures yet.</div>
+                    <div id="history-games-empty" class="empty-saves hidden">{% ui "No finished adventures yet." %}</div>
                 </div>
             {% else %}
-                <h2 class="section-title">Start New Adventure</h2>
-                <label for="adventure-select">Choose an adventure</label>
+                <h2 class="section-title">{% ui "Start New Adventure" %}</h2>
+                <label for="adventure-select">{% ui "Choose an adventure" %}</label>
                 <select id="adventure-select">
-                    <option value="">Loading adventures...</option>
+                    <option value="">{% ui "Loading adventures..." %}</option>
                 </select>
 
                 <div id="intro-box" class="intro-box">
-                    Select an adventure to see its introduction.
+                    {% ui "Select an adventure to see its introduction." %}
                 </div>
 
-                <button id="start-btn" class="hidden">Start Adventure</button>
+                <button id="start-btn" class="hidden">{% ui "Start Adventure" %}</button>
             {% endif %}
 
             <div id="status" class="status"></div>
         </div>
     </div>
 
+    {% include "game/_language_toggle.html" %}
     <script>
+        const T = {
+            adventure: "{% ui 'Adventure' %}", adventurer: "{% ui 'Adventurer' %}", finished: "{% ui 'Finished' %}", updated: "{% ui 'Updated' %}",
+            continue: "{% ui 'Continue' %}", delete: "{% ui 'Delete' %}", endingFinished: "{% ui 'Ending: Finished' %}", begun: "{% ui 'The adventure has just begun.' %}",
+            endings: {"Ending: Finished":"{% ui 'Ending: Finished' %}","Ending: Victory":"{% ui 'Ending: Victory' %}","Ending: Death":"{% ui 'Ending: Death' %}","Ending: Defeat":"{% ui 'Ending: Defeat' %}"},
+            failedSaves: "{% ui 'Failed to load saved games' %}", loadingSave: "{% ui 'Loading saved game...' %}", failedSave: "{% ui 'Failed to load saved game' %}",
+            deletingSave: "{% ui 'Deleting saved game...' %}", failedDelete: "{% ui 'Failed to delete saved game' %}", loadingAdventures: "{% ui 'Loading adventures...' %}",
+            selectAdventure: "{% ui '-- Select an adventure --' %}", failedAdventures: "{% ui 'Failed to load adventures.' %}", introHint: "{% ui 'Select an adventure to see its introduction.' %}", noDescription: "{% ui 'No description available.' %}"
+        };
         const API_ADVENTURES_URL = "{% url 'api_adventures' %}";
         const CHARACTER_CREATE_URL = "{% url 'character_create' %}";
         const IS_AUTHENTICATED = {{ user.is_authenticated|yesno:"true,false" }};
@@ -360,20 +370,20 @@
                 }
 
                 const title = document.createElement("h3");
-                title.textContent = save.adventure_name || "Adventure";
+                title.textContent = save.adventure_name || T.adventure;
 
                 const meta = document.createElement("div");
                 meta.className = "save-meta";
                 const hp = save.player_hp == null ? "" : ` · HP ${save.player_hp}/${save.player_max_hp}`;
-                const dateLabel = save.is_finished ? "Finished" : "Updated";
+                const dateLabel = save.is_finished ? T.finished : T.updated;
                 const dateValue = save.is_finished ? save.finished_at : save.updated_at;
                 meta.textContent = `${save.player_name || "Adventurer"}${hp} · ${dateLabel} ${formatSaveDate(dateValue)}`;
 
                 const preview = document.createElement("div");
                 preview.className = "save-preview";
                 preview.textContent = save.is_finished
-                    ? (save.ending_reason || "Ending: Finished")
-                    : (save.story_preview || "The adventure has just begun.");
+                    ? (T.endings[save.ending_reason] || save.ending_reason || T.endingFinished)
+                    : (save.story_preview || T.begun);
 
                 const actions = document.createElement("div");
                 actions.className = "save-actions";
@@ -381,7 +391,7 @@
                 if (allowContinue) {
                     const continueBtn = document.createElement("button");
                     continueBtn.type = "button";
-                    continueBtn.textContent = "Continue";
+                    continueBtn.textContent = T.continue;
                     continueBtn.addEventListener("click", () => loadSave(save.id));
                     actions.appendChild(continueBtn);
                 }
@@ -389,7 +399,7 @@
                 const deleteBtn = document.createElement("button");
                 deleteBtn.type = "button";
                 deleteBtn.className = "delete-save-btn";
-                deleteBtn.textContent = "Delete";
+                deleteBtn.textContent = T.delete;
                 deleteBtn.addEventListener("click", () => deleteSave(save.id));
 
                 actions.appendChild(deleteBtn);
@@ -414,7 +424,7 @@
                 const data = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(data.error || "Failed to load saved games");
+                    throw new Error(data.error || T.failedSaves);
                 }
 
                 renderSaves(data.saves || [], data.history || []);
@@ -427,7 +437,7 @@
 
         async function loadSave(id) {
             statusBox.classList.remove("error");
-            statusBox.textContent = "Loading saved game...";
+            statusBox.textContent = T.loadingSave;
 
             try {
                 const response = await fetch(saveUrl(API_SAVE_LOAD_TEMPLATE, id), {
@@ -439,7 +449,7 @@
                 const data = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(data.error || "Failed to load saved game");
+                    throw new Error(data.error || T.failedSave);
                 }
 
                 window.location.href = data.redirect_url || "/play/";
@@ -452,7 +462,7 @@
 
         async function deleteSave(id) {
             statusBox.classList.remove("error");
-            statusBox.textContent = "Deleting saved game...";
+            statusBox.textContent = T.deletingSave;
 
             try {
                 const response = await fetch(saveUrl(API_SAVE_DELETE_TEMPLATE, id), {
@@ -464,7 +474,7 @@
                 const data = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(data.error || "Failed to delete saved game");
+                    throw new Error(data.error || T.failedDelete);
                 }
 
                 statusBox.textContent = "";
@@ -477,7 +487,7 @@
         }
 
         async function loadAdventures() {
-            statusBox.textContent = "Loading adventures...";
+            statusBox.textContent = T.loadingAdventures;
 
             try {
                 const response = await fetch(API_ADVENTURES_URL);
@@ -485,7 +495,7 @@
 
                 adventures = data.adventures || [];
 
-                adventureSelect.innerHTML = '<option value="">-- Select an adventure --</option>';
+                adventureSelect.innerHTML = `<option value="">${T.selectAdventure}</option>`;
 
                 for (const adv of adventures) {
                     const option = document.createElement("option");
@@ -497,7 +507,7 @@
                 statusBox.textContent = "";
             } catch (err) {
                 console.error(err);
-                statusBox.textContent = "Failed to load adventures.";
+                statusBox.textContent = T.failedAdventures;
                 statusBox.classList.add("error");
             }
         }
@@ -507,12 +517,12 @@
             const adv = adventures.find(a => a.id === selectedId);
 
             if (!adv) {
-                introBox.textContent = "Select an adventure to see its introduction.";
+                introBox.textContent = T.introHint;
                 startBtn.classList.add("hidden");
                 return;
             }
 
-            introBox.textContent = adv.description || "No description available.";
+            introBox.textContent = adv.description || T.noDescription;
             startBtn.classList.remove("hidden");
         });
 

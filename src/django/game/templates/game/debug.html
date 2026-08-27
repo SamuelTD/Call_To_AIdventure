@@ -1,8 +1,9 @@
+{% load ui_i18n %}{% load i18n %}{% get_current_language as LANGUAGE_CODE %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
     <meta charset="UTF-8">
-    <title>Call to AIdventure Debug</title>
+    <title>Call to AIdventure — {% ui "Debug Page" %}</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -46,38 +47,38 @@
     </style>
 </head>
 <body>
-    <h1>Call to AIdventure — Debug Page</h1>
+    <h1>Call to AIdventure — {% ui "Debug Page" %}</h1>
 
     <div class="box">
-        <h2>Start Game</h2>
-        <label for="adventureId">Adventure ID</label>
+        <h2>{% ui "Start Game" %}</h2>
+        <label for="adventureId">{% ui "Adventure ID" %}</label>
         <input id="adventureId" type="text" value="emerald_sword" />
 
-        <button id="startBtn">Start Game</button>
+        <button id="startBtn">{% ui "Start Game" %}</button>
     </div>
 
     <div class="box">
-        <h2>Send Input</h2>
-        <label for="playerInput">Player Input</label>
-        <textarea id="playerInput" rows="4" placeholder="Type something...">hello engine</textarea>
+        <h2>{% ui "Send Input" %}</h2>
+        <label for="playerInput">{% ui "Player Input" %}</label>
+        <textarea id="playerInput" rows="4" placeholder="{% ui 'Type something...' %}">hello engine</textarea>
 
         <button id="playBtn">Send to /api/play</button>
     </div>
 
     <div class="box">
-        <h2>Game Step</h2>
+        <h2>{% ui "Game Step" %}</h2>
 
-        <label>Choice</label>
+        <label>{% ui "Choice" %}</label>
         <input id="choiceInput" value="Go onward." />
 
         <button id="stepBtn">Send to /api/step</button>
     </div>
 
-    <button onclick="startCombat()">Start Combat</button>
-    <button onclick="combatAction()">Combat Action</button>
+    <button onclick="startCombat()">{% ui "Start Combat" %}</button>
+    <button onclick="combatAction()">{% ui "Combat Action" %}</button>
 
     <div class="box">
-        <h2>Latest Response</h2>
+        <h2>{% ui "Latest Response" %}</h2>
         <pre id="output">No response yet.</pre>
     </div>
 
@@ -165,5 +166,6 @@
         });
 
     </script>
+    {% include "game/_language_toggle.html" %}
 </body>
 </html>

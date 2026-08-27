@@ -1,8 +1,9 @@
+{% load ui_i18n %}{% load i18n %}{% get_current_language as LANGUAGE_CODE %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
     <meta charset="UTF-8">
-    <title>Game Over - Call To AIdventure</title>
+    <title>{% ui "Game Over" %} - Call To AIdventure</title>
     <style>
         body {
             margin: 0;
@@ -56,10 +57,11 @@
 <body>
     <div class="page">
         <div class="panel">
-            <h1>Game Over</h1>
-            <p>Your adventure ends here.</p>
-            <a href="{% url 'landing' %}">Return to landing</a>
+            <h1>{% ui "Game Over" %}</h1>
+            <p>{% ui "Your adventure ends here." %}</p>
+            <a href="{% url 'landing' %}">{% ui "Return to landing" %}</a>
         </div>
     </div>
+    {% include "game/_language_toggle.html" %}
 </body>
 </html>

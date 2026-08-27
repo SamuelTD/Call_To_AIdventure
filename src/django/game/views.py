@@ -15,6 +15,7 @@ from game.models import CharacterTemplate, SaveGame
 from game.services.tools import initialize_game, persist_game, rebuild_state
 from game.services.game_engine import get_engine
 from utils.player import create_player, get_character_creation_options
+from game.ui_translations import ui_text
 from observability.metrics import (
     ADVENTURE_RESULTS,
     COMBAT_ACTIONS,
@@ -154,7 +155,7 @@ class DevAccountDashboardView(TemplateView):
                 user.save(update_fields=["password"])
                 messages.success(request, f'Updated password for "{user.get_username()}".')
         else:
-            return HttpResponseBadRequest("Unknown action")
+            return HttpResponseBadRequest(ui_text("Unknown action"))
 
         return redirect("dev_accounts")
 
@@ -164,13 +165,13 @@ class PlayView(View):
         try:
             payload = json.loads(request.body.decode("utf-8") or "{}")
         except json.JSONDecodeError:
-            return HttpResponseBadRequest("Invalid JSON body")
+            return HttpResponseBadRequest(ui_text("Invalid JSON body"))
 
         user_input = (payload.get("input") or "").strip()
         session_id = payload.get("session_id")  # optional for now
 
         if not user_input:
-            return JsonResponse({"error": "input is required"}, status=400)
+            return JsonResponse({"error": ui_text("input is required")}, status=400)
 
         # TODO: wire to your engine in the next step
         return JsonResponse({"ok": True, "echo": user_input, "session_id": session_id})
@@ -184,11 +185,11 @@ class StartGameView(View):
         try:
             body = json.loads(request.body.decode("utf-8") or "{}")
         except json.JSONDecodeError:
-            return HttpResponseBadRequest("Invalid JSON")
+            return HttpResponseBadRequest(ui_text("Invalid JSON"))
 
         adventure_id = body.get("adventure_id")
         if not adventure_id:
-            return JsonResponse({"error": "Missing adventure_id"}, status=400)
+            return JsonResponse({"error": ui_text("Missing adventure_id")}, status=400)
 
         character = body.get("character") or {}
         try:
@@ -199,12 +200,12 @@ class StartGameView(View):
                 gender=character.get("gender", ""),
             )
         except ValueError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": ui_text(str(exc))}, status=400)
 
         try:
             state, intro, adventure = initialize_game(adventure_id, player)
         except StopIteration:
-            return JsonResponse({"error": "Unknown adventure_id"}, status=404)
+            return JsonResponse({"error": ui_text("Unknown adventure_id")}, status=404)
 
         # run the engine initialization (this runs pre_graph)
         engine = get_engine()
@@ -232,18 +233,18 @@ class StepGameView(View):
         try:
             body = json.loads(request.body.decode("utf-8"))
         except json.JSONDecodeError:
-            return HttpResponseBadRequest("Invalid JSON")
+            return HttpResponseBadRequest(ui_text("Invalid JSON"))
 
         choice = body.get("choice")
 
         if not choice:
-            return JsonResponse({"error": "choice is required"}, status=400)
+            return JsonResponse({"error": ui_text("choice is required")}, status=400)
 
         # Load state from session
         serialized_state = request.session.get("game_state")
 
         if not serialized_state:
-            return JsonResponse({"error": "No active game"}, status=400)
+            return JsonResponse({"error": ui_text("No active game")}, status=400)
 
         # Rebuild runtime objects
         state = rebuild_state(serialized_state)
@@ -314,12 +315,12 @@ class StoryTurnMetricView(View):
     def post(self, request):
         serialized_state = request.session.get("game_state")
         if not serialized_state:
-            return JsonResponse({"error": "No active game"}, status=400)
+            return JsonResponse({"error": ui_text("No active game")}, status=400)
 
         try:
             body = json.loads(request.body.decode("utf-8") or "{}")
         except json.JSONDecodeError:
-            return HttpResponseBadRequest("Invalid JSON")
+            return HttpResponseBadRequest(ui_text("Invalid JSON"))
 
         duration_seconds = body.get("duration_seconds")
         if (
@@ -349,7 +350,7 @@ class CurrentRoomView(View):
         serialized_state = request.session.get("game_state")
 
         if not serialized_state:
-            return JsonResponse({"error": "No active game"}, status=400)
+            return JsonResponse({"error": ui_text("No active game")}, status=400)
 
         state = rebuild_state(serialized_state)
         engine = get_engine()
@@ -384,7 +385,7 @@ class StartCombatView(View):
         serialized_state = request.session.get("game_state")
 
         if not serialized_state:
-            return JsonResponse({"error": "No active game"}, status=400)
+            return JsonResponse({"error": ui_text("No active game")}, status=400)
 
         state = rebuild_state(serialized_state)
         was_already_started = state.get("current_monster") is not None
@@ -395,7 +396,7 @@ class StartCombatView(View):
         state = result["state"]
 
         if result.get("mode") == "error":
-            return JsonResponse({"error": result.get("error", "Failed to start combat")}, status=400)
+            return JsonResponse({"error": ui_text(result.get("error", "Failed to start combat"))}, status=400)
 
         if not was_already_started:
             COMBATS_STARTED.labels(
@@ -415,17 +416,17 @@ class CombatActionView(View):
         try:
             body = json.loads(request.body.decode("utf-8"))
         except json.JSONDecodeError:
-            return HttpResponseBadRequest("Invalid JSON")
+            return HttpResponseBadRequest(ui_text("Invalid JSON"))
 
         action = body.get("action")
 
         if not action:
-            return JsonResponse({"error": "action is required"}, status=400)
+            return JsonResponse({"error": ui_text("action is required")}, status=400)
 
         serialized_state = request.session.get("game_state")
 
         if not serialized_state:
-            return JsonResponse({"error": "No active game"}, status=400)
+            return JsonResponse({"error": ui_text("No active game")}, status=400)
 
         state = rebuild_state(serialized_state)
 
@@ -435,7 +436,7 @@ class CombatActionView(View):
         state = result["state"]
 
         if result.get("mode") == "error":
-            return JsonResponse({"error": result.get("error", "Combat action failed")}, status=400)
+            return JsonResponse({"error": ui_text(result.get("error", "Combat action failed"))}, status=400)
 
         COMBAT_ACTIONS.labels(action=action).inc()
         if result.get("mode") in {"victory", "defeat"}:
@@ -455,12 +456,12 @@ class CombatStateView(View):
         serialized_state = request.session.get("game_state")
 
         if not serialized_state:
-            return JsonResponse({"error": "No active game"}, status=400)
+            return JsonResponse({"error": ui_text("No active game")}, status=400)
 
         state = rebuild_state(serialized_state)
 
         if not state.get("current_monster_name"):
-            return JsonResponse({"error": "No active combat"}, status=400)
+            return JsonResponse({"error": ui_text("No active combat")}, status=400)
 
         payload = build_combat_state_payload(state)
         payload["combat_fluff"] = request.session.get("combat_fluff", "")
@@ -567,12 +568,12 @@ class CharacterTemplateListView(View):
 class CharacterTemplateSaveView(View):
     def post(self, request):
         if not request.user.is_authenticated:
-            return JsonResponse({"error": "Login required"}, status=401)
+            return JsonResponse({"error": ui_text("Login required")}, status=401)
 
         try:
             body = json.loads(request.body.decode("utf-8") or "{}")
         except json.JSONDecodeError:
-            return HttpResponseBadRequest("Invalid JSON")
+            return HttpResponseBadRequest(ui_text("Invalid JSON"))
 
         character = body.get("character") or {}
         try:
@@ -583,7 +584,7 @@ class CharacterTemplateSaveView(View):
                 gender=character.get("gender", ""),
             )
         except ValueError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": ui_text(str(exc))}, status=400)
 
         duplicate_template = CharacterTemplate.objects.filter(
             user=request.user,
@@ -632,7 +633,7 @@ class CharacterTemplateSaveView(View):
 class CharacterTemplateDeleteView(View):
     def post(self, request, template_id):
         if not request.user.is_authenticated:
-            return JsonResponse({"error": "Login required"}, status=401)
+            return JsonResponse({"error": ui_text("Login required")}, status=401)
 
         deleted_count, _ = CharacterTemplate.objects.filter(
             id=template_id,
@@ -662,14 +663,14 @@ class SaveGameListView(View):
 class LoadSaveGameView(View):
     def post(self, request, save_game_id):
         if not request.user.is_authenticated:
-            return JsonResponse({"error": "Login required"}, status=401)
+            return JsonResponse({"error": ui_text("Login required")}, status=401)
 
         save_game = SaveGame.objects.filter(id=save_game_id, user=request.user).first()
         if save_game is None:
             raise Http404("Save game not found")
 
         if save_game.is_finished:
-            return JsonResponse({"error": "Finished games are in history and cannot be loaded"}, status=400)
+            return JsonResponse({"error": ui_text("Finished games are in history and cannot be loaded")}, status=400)
 
         request.session["game_state"] = save_game.state
         request.session["save_game_id"] = save_game.id
@@ -689,7 +690,7 @@ class LoadSaveGameView(View):
 class DeleteSaveGameView(View):
     def post(self, request, save_game_id):
         if not request.user.is_authenticated:
-            return JsonResponse({"error": "Login required"}, status=401)
+            return JsonResponse({"error": ui_text("Login required")}, status=401)
 
         deleted_count, _ = SaveGame.objects.filter(id=save_game_id, user=request.user).delete()
 
@@ -714,7 +715,7 @@ class CurrentGameStateView(View):
         serialized_state = request.session.get("game_state")
 
         if not serialized_state:
-            return JsonResponse({"error": "No active game"}, status=400)
+            return JsonResponse({"error": ui_text("No active game")}, status=400)
 
         state = rebuild_state(serialized_state)
         player_sheet = build_character_sheet(state["player"])

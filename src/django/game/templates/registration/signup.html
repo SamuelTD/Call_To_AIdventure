@@ -1,8 +1,9 @@
+{% load ui_i18n %}{% load i18n %}{% get_current_language as LANGUAGE_CODE %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
     <meta charset="UTF-8">
-    <title>Create Account - Call To AIdventure</title>
+    <title>{% ui "Create Account" %} - Call To AIdventure</title>
     <style>
         body {
             margin: 0;
@@ -91,7 +92,7 @@
 </head>
 <body>
     <main class="auth-panel">
-        <h1>Create Account</h1>
+        <h1>{% ui "Create Account" %}</h1>
 
         <form method="post">
             {% csrf_token %}
@@ -104,11 +105,12 @@
                 {% endif %}
             {% endfor %}
 
-            <button type="submit">Create Account</button>
+            <button type="submit">{% ui "Create Account" %}</button>
         </form>
 
-        <a class="secondary-link" href="{% url 'login' %}">Log In Instead</a>
-        <a class="secondary-link" href="{% url 'landing' %}">Back to Adventures</a>
+        <a class="secondary-link" href="{% url 'login' %}">{% ui "Log In Instead" %}</a>
+        <a class="secondary-link" href="{% url 'landing' %}">{% ui "Back to Adventures" %}</a>
     </main>
+    {% include "game/_language_toggle.html" %}
 </body>
 </html>

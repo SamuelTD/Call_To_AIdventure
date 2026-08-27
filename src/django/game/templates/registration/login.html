@@ -1,8 +1,9 @@
+{% load ui_i18n %}{% load i18n %}{% get_current_language as LANGUAGE_CODE %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
     <meta charset="UTF-8">
-    <title>Log In - Call To AIdventure</title>
+    <title>{% ui "Log In" %} - Call To AIdventure</title>
     <style>
         body {
             margin: 0;
@@ -78,7 +79,7 @@
 </head>
 <body>
     <main class="auth-panel">
-        <h1>Log In</h1>
+        <h1>{% ui "Log In" %}</h1>
 
         {% if form.non_field_errors %}
             <div class="form-error">{{ form.non_field_errors }}</div>
@@ -86,19 +87,20 @@
 
         <form method="post">
             {% csrf_token %}
-            <label for="{{ form.username.id_for_label }}">Username</label>
+            <label for="{{ form.username.id_for_label }}">{% ui "Username" %}</label>
             {{ form.username }}
             {{ form.username.errors }}
 
-            <label for="{{ form.password.id_for_label }}">Password</label>
+            <label for="{{ form.password.id_for_label }}">{% ui "Password" %}</label>
             {{ form.password }}
             {{ form.password.errors }}
 
-            <button type="submit">Log In</button>
+            <button type="submit">{% ui "Log In" %}</button>
         </form>
 
-        <a class="secondary-link" href="{% url 'signup' %}">Create Account</a>
-        <a class="secondary-link" href="{% url 'landing' %}">Back to Adventures</a>
+        <a class="secondary-link" href="{% url 'signup' %}">{% ui "Create Account" %}</a>
+        <a class="secondary-link" href="{% url 'landing' %}">{% ui "Back to Adventures" %}</a>
     </main>
+    {% include "game/_language_toggle.html" %}
 </body>
 </html>

@@ -1,8 +1,9 @@
+{% load ui_i18n %}{% load i18n %}{% get_current_language as LANGUAGE_CODE %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
     <meta charset="UTF-8">
-    <title>Create Character - Call To AIdventure</title>
+    <title>{% ui "Create Character" %} - Call To AIdventure</title>
     <style>
         body {
             margin: 0;
@@ -230,60 +231,60 @@
 <body>
     <div class="page">
         <div class="top-links">
-            <a href="{% url 'landing' %}">← Back to adventure selection</a>
+            <a href="{% url 'landing' %}">← {% ui "Back to adventure selection" %}</a>
         </div>
 
         <div class="panel">
-            <h1>Create Character</h1>
+            <h1>{% ui "Create Character" %}</h1>
             <div class="adventure-name">
                 {% if adventure %}
                     {{ adventure.name }}
                 {% else %}
-                    Choose an adventure before creating a character.
+                    {% ui "Choose an adventure before creating a character." %}
                 {% endif %}
             </div>
 
             {% if adventure %}
-                <div class="creator-tabs" role="tablist" aria-label="Character creation">
-                    <button id="new-character-tab" class="tab-btn active" type="button">New Character</button>
-                    <button id="templates-tab" class="tab-btn" type="button">Character Templates</button>
+                <div class="creator-tabs" role="tablist" aria-label="{% ui 'Character creation' %}">
+                    <button id="new-character-tab" class="tab-btn active" type="button">{% ui "New Character" %}</button>
+                    <button id="templates-tab" class="tab-btn" type="button">{% ui "Character Templates" %}</button>
                 </div>
 
                 <div id="new-character-panel" class="tab-panel">
                     <form id="character-form">
-                        <label for="character-name">Name</label>
+                        <label for="character-name">{% ui "Name" %}</label>
                         <input id="character-name" name="name" type="text" maxlength="60" placeholder="Stan" autocomplete="off" required>
 
                         <div class="character-grid">
                             <div>
-                                <label for="character-race">Race</label>
+                                <label for="character-race">{% ui "Race" %}</label>
                                 <select id="character-race" name="race" required></select>
                             </div>
 
                             <div>
-                                <label for="character-class">Class</label>
+                                <label for="character-class">{% ui "Class" %}</label>
                                 <select id="character-class" name="class" required></select>
                             </div>
 
                             <div>
-                                <label for="character-gender">Gender</label>
+                                <label for="character-gender">{% ui "Gender" %}</label>
                                 <select id="character-gender" name="gender" required></select>
                             </div>
                         </div>
 
                         <div class="actions">
-                            <a class="secondary-link" href="{% url 'landing' %}">Change Adventure</a>
+                            <a class="secondary-link" href="{% url 'landing' %}">{% ui "Change Adventure" %}</a>
                             {% if user.is_authenticated %}
-                                <button type="button" id="save-template-btn" class="template-button" disabled>Save Template</button>
+                                <button type="button" id="save-template-btn" class="template-button" disabled>{% ui "Save Template" %}</button>
                             {% endif %}
-                            <button type="submit" id="finish-btn">Finish</button>
+                            <button type="submit" id="finish-btn">{% ui "Finish" %}</button>
                         </div>
                     </form>
                 </div>
 
                 <div id="templates-panel" class="tab-panel hidden">
                     <div id="template-list" class="template-list"></div>
-                    <div id="empty-templates" class="empty-templates hidden">No character templates available.</div>
+                    <div id="empty-templates" class="empty-templates hidden">{% ui "No character templates available." %}</div>
                 </div>
             {% endif %}
 
@@ -291,7 +292,16 @@
         </div>
     </div>
 
+    {% include "game/_language_toggle.html" %}
     <script>
+        const T = {
+            failedOptions: "{% ui 'Failed to load character options' %}", saving: "{% ui 'Saving template...' %}", failedSave: "{% ui 'Failed to save template' %}",
+            alreadySaved: "{% ui 'Template already saved.' %}", saved: "{% ui 'Template saved.' %}", updated: "{% ui 'Template updated.' %}",
+            starting: "{% ui 'Starting adventure...' %}", failedStart: "{% ui 'Failed to start adventure' %}", deleteLabel: "{% ui 'Delete' %}", deleteTemplate: "{% ui 'Delete template' %}",
+            deleting: "{% ui 'Deleting template...' %}", failedDelete: "{% ui 'Failed to delete template' %}", useCharacter: "{% ui 'Use This Character' %}",
+            failedTemplates: "{% ui 'Failed to load character templates' %}",
+            labels: {Human: "{% ui 'Human' %}", Elf: "{% ui 'Elf' %}", Dwarf: "{% ui 'Dwarf' %}", Halfling: "{% ui 'Halfling' %}", Female: "{% ui 'Female' %}", Male: "{% ui 'Male' %}", fighter: "{% ui 'fighter' %}", rogue: "{% ui 'rogue' %}", wizard: "{% ui 'wizard' %}"}
+        };
         const API_CHARACTER_OPTIONS_URL = "{% url 'api_character_options' %}";
         const API_CHARACTER_TEMPLATES_URL = "{% url 'api_character_templates' %}";
         const API_CHARACTER_TEMPLATE_DELETE_TEMPLATE = "{% url 'api_character_template_delete' 0 %}";
@@ -316,6 +326,7 @@
         const statusBox = document.getElementById("status");
 
         function titleCase(value) {
+            if (T.labels[value]) return T.labels[value];
             return value
                 .replaceAll("_", " ")
                 .replace(/\b\w/g, letter => letter.toUpperCase());
@@ -354,12 +365,12 @@
                 const data = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(data.error || "Failed to load character options");
+                    throw new Error(data.error || T.failedOptions);
                 }
 
-                populateSelect(characterRace, data.races || []);
+                populateSelect(characterRace, data.races || [], titleCase);
                 populateSelect(characterClass, data.classes || [], titleCase);
-                populateSelect(characterGender, data.genders || []);
+                populateSelect(characterGender, data.genders || [], titleCase);
                 updateTemplateButtonState();
             } catch (err) {
                 console.error(err);
@@ -403,7 +414,7 @@
 
             saveTemplateBtn.disabled = true;
             statusBox.classList.remove("error");
-            statusBox.textContent = "Saving template...";
+            statusBox.textContent = T.saving;
 
             try {
                 const response = await fetch(API_SAVE_TEMPLATE_URL, {
@@ -418,13 +429,13 @@
                 const data = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(data.error || "Failed to save template");
+                    throw new Error(data.error || T.failedSave);
                 }
 
                 if (data.skipped) {
-                    statusBox.textContent = "Template already saved.";
+                    statusBox.textContent = T.alreadySaved;
                 } else {
-                    statusBox.textContent = data.created ? "Template saved." : "Template updated.";
+                    statusBox.textContent = data.created ? T.saved : T.updated;
                     await loadCharacterTemplates();
                 }
             } catch (err) {
@@ -438,7 +449,7 @@
 
         async function startAdventure(character) {
             statusBox.classList.remove("error");
-            statusBox.textContent = "Starting adventure...";
+            statusBox.textContent = T.starting;
 
             const response = await fetch(API_START_URL, {
                 method: "POST",
@@ -453,7 +464,7 @@
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error || "Failed to start adventure");
+                throw new Error(data.error || T.failedStart);
             }
 
             window.location.href = "{% url 'play' %}";
@@ -477,13 +488,13 @@
                     const deleteButton = document.createElement("button");
                     deleteButton.type = "button";
                     deleteButton.className = "delete-template-btn";
-                    deleteButton.setAttribute("aria-label", `Delete ${template.name}`);
-                    deleteButton.title = "Delete template";
+                    deleteButton.setAttribute("aria-label", `${T.deleteLabel} ${template.name}`);
+                    deleteButton.title = T.deleteTemplate;
                     deleteButton.textContent = "×";
                     deleteButton.addEventListener("click", async () => {
                         deleteButton.disabled = true;
                         statusBox.classList.remove("error");
-                        statusBox.textContent = "Deleting template...";
+                        statusBox.textContent = T.deleting;
 
                         try {
                             const response = await fetch(templateDeleteUrl(template.id), {
@@ -495,7 +506,7 @@
                             const data = await response.json();
 
                             if (!response.ok) {
-                                throw new Error(data.error || "Failed to delete template");
+                                throw new Error(data.error || T.failedDelete);
                             }
 
                             statusBox.textContent = "";
@@ -515,11 +526,11 @@
 
                 const meta = document.createElement("div");
                 meta.className = "template-meta";
-                meta.textContent = `${template.gender} ${template.race} ${titleCase(template.class)}`;
+                meta.textContent = `${titleCase(template.gender)} ${titleCase(template.race)} ${titleCase(template.class)}`;
 
                 const useButton = document.createElement("button");
                 useButton.type = "button";
-                useButton.textContent = "Use This Character";
+                useButton.textContent = T.useCharacter;
                 useButton.addEventListener("click", async () => {
                     useButton.disabled = true;
                     try {
@@ -552,7 +563,7 @@
                 const data = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(data.error || "Failed to load character templates");
+                    throw new Error(data.error || T.failedTemplates);
                 }
 
                 renderCharacterTemplates(data.templates || []);
@@ -579,7 +590,7 @@
 
                 finishBtn.disabled = true;
                 statusBox.classList.remove("error");
-                statusBox.textContent = "Starting adventure...";
+                statusBox.textContent = T.starting;
 
                 try {
                     await startAdventure(getCharacterPayload());

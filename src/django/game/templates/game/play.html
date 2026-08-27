@@ -1,8 +1,9 @@
+{% load ui_i18n %}{% load i18n %}{% get_current_language as LANGUAGE_CODE %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
     <meta charset="UTF-8">
-    <title>Play - Call To AIdventure</title>
+    <title>{% ui "Play" %} - Call To AIdventure</title>
     <style>
         body {
             margin: 0;
@@ -148,25 +149,25 @@
 <body>
     <div class="page">
         <div class="top-links">
-            <a href="{% url 'landing' %}">← Back to landing</a>
+            <a href="{% url 'landing' %}">← {% ui "Back to landing" %}</a>
         </div>
 
         <div class="title-bar">
-            <h1 id="adventure-title">Loading adventure...</h1>
+            <h1 id="adventure-title">{% ui "Loading adventure..." %}</h1>
         </div>
 
         <div class="layout">
             <div class="panel">
-                <div id="story-box" class="story-box">Loading story...</div>
+                <div id="story-box" class="story-box">{% ui "Loading current game..." %}</div>
 
                 <div class="choices-box">
-                    <h3>What do you do?</h3>
+                    <h3>{% ui "What do you do?" %}</h3>
                     <form id="choice-form">
                         <div id="choices-container"></div>
 
                         <div class="action-row">
-                            <button type="submit" id="next-btn">Next</button>
-                            <button type="button" id="current-room-btn">Check current room</button>
+                            <button type="submit" id="next-btn">{% ui "Next" %}</button>
+                            <button type="button" id="current-room-btn">{% ui "Check current room" %}</button>
                         </div>
                     </form>
                 </div>
@@ -175,36 +176,39 @@
             </div>
 
             <div class="panel">
-                <h2>Character Sheet</h2>
+                <h2>{% ui "Character Sheet" %}</h2>
 
                 <div class="sheet-block">
-                    <h3>Identity</h3>
-                    <div class="sheet-line"><strong>Name:</strong> <span id="player-name"></span></div>
-                    <div class="sheet-line"><strong>Class:</strong> <span id="player-class"></span></div>
-                    <div class="sheet-line"><strong>Race:</strong> <span id="player-race"></span></div>
-                    <div class="sheet-line"><strong>Gender:</strong> <span id="player-gender"></span></div>
+                    <h3>{% ui "Identity" %}</h3>
+                    <div class="sheet-line"><strong>{% ui "Name" %}:</strong> <span id="player-name"></span></div>
+                    <div class="sheet-line"><strong>{% ui "Class" %}:</strong> <span id="player-class"></span></div>
+                    <div class="sheet-line"><strong>{% ui "Race" %}:</strong> <span id="player-race"></span></div>
+                    <div class="sheet-line"><strong>{% ui "Gender" %}:</strong> <span id="player-gender"></span></div>
                 </div>
 
                 <div class="sheet-block">
-                    <h3>Stats</h3>
-                    <div class="sheet-line"><strong>Gold:</strong> <span id="player-gold"></span></div>
+                    <h3>{% ui "Stats" %}</h3>
+                    <div class="sheet-line"><strong>{% ui "Gold" %}:</strong> <span id="player-gold"></span></div>
                     <div class="sheet-line"><strong>HP:</strong> <span id="player-hp"></span></div>
                 </div>
 
                 <div class="sheet-block">
-                    <h3>Equipment</h3>
-                    <div class="sheet-line"><strong>Weapon:</strong> <span id="player-weapon"></span></div>
+                    <h3>{% ui "Equipment" %}</h3>
+                    <div class="sheet-line"><strong>{% ui "Weapon" %}:</strong> <span id="player-weapon"></span></div>
                 </div>
 
                 <div class="sheet-block">
-                    <h3>Inventory</h3>
+                    <h3>{% ui "Inventory" %}</h3>
                     <ul id="player-inventory" class="inventory"></ul>
                 </div>
             </div>
         </div>
     </div>
 
+    {% include "game/_language_toggle.html" %}
     <script>
+        const T = {noChoices:"{% ui 'No choices available.' %}",none:"{% ui 'None' %}",loading:"{% ui 'Loading current game...' %}",failedLoad:"{% ui 'Failed to load game state' %}",adventure:"{% ui 'Adventure' %}",selectAction:"{% ui 'Please select an action.' %}",advancing:"{% ui 'Advancing story...' %}",stepFailed:"{% ui 'Step failed' %}",checkingRoom:"{% ui 'Checking current room...' %}",roomFailed:"{% ui 'Room check failed' %}",labels:{Human:"{% ui 'Human' %}",Elf:"{% ui 'Elf' %}",Dwarf:"{% ui 'Dwarf' %}",Halfling:"{% ui 'Halfling' %}",Female:"{% ui 'Female' %}",Male:"{% ui 'Male' %}",fighter:"{% ui 'fighter' %}",rogue:"{% ui 'rogue' %}",wizard:"{% ui 'wizard' %}",Longsword:"{% ui 'Longsword' %}","Twin Daggers":"{% ui 'Twin Daggers' %}",Quarterstaff:"{% ui 'Quarterstaff' %}",Sword:"{% ui 'Sword' %}"}};
+        const displayLabel = value => T.labels[value] || value || "";
         const API_STATE_URL = "{% url 'api_state' %}";
         const API_STEP_URL = "{% url 'api_step' %}";
         const API_STORY_TURN_METRIC_URL = "{% url 'api_story_turn_metric' %}";
@@ -235,7 +239,7 @@
             choicesContainer.innerHTML = "";
 
             if (!choices || choices.length === 0) {
-                choicesContainer.innerHTML = "<p>No choices available.</p>";
+                choicesContainer.innerHTML = `<p>${T.noChoices}</p>`;
                 return;
             }
 
@@ -257,12 +261,12 @@
 
         function renderPlayer(player) {
             playerName.textContent = player.name || "";
-            playerClass.textContent = player.class || "";
-            playerRace.textContent = player.race || "";
-            playerGender.textContent = player.gender || "";
+            playerClass.textContent = displayLabel(player.class);
+            playerRace.textContent = displayLabel(player.race);
+            playerGender.textContent = displayLabel(player.gender);
             playerGold.textContent = player.gold ?? "";
             playerHp.textContent = `${player.hp ?? ""}/${player.max_hp ?? ""}`;
-            playerWeapon.textContent = player.weapon || "";
+            playerWeapon.textContent = displayLabel(player.weapon);
 
             playerInventory.innerHTML = "";
 
@@ -274,7 +278,7 @@
                 }
             } else {
                 const li = document.createElement("li");
-                li.textContent = "None";
+                li.textContent = T.none;
                 playerInventory.appendChild(li);
             }
         }
@@ -295,17 +299,17 @@
         }
 
         async function loadState() {
-            statusBox.textContent = "Loading current game...";
+            statusBox.textContent = T.loading;
 
             try {
                 const response = await fetch(API_STATE_URL);
                 const data = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(data.error || "Failed to load game state");
+                    throw new Error(data.error || T.failedLoad);
                 }
 
-                titleEl.textContent = data.adventure_name || "Adventure";
+                titleEl.textContent = data.adventure_name || T.adventure;
                 storyBox.textContent = data.story || "";
                 renderChoices(data.choices || []);
                 renderPlayer(data.player || {});
@@ -323,13 +327,13 @@
             const selected = document.querySelector('input[name="choice"]:checked');
 
             if (!selected) {
-                statusBox.textContent = "Please select an action.";
+                statusBox.textContent = T.selectAction;
                 statusBox.classList.add("error");
                 return;
             }
 
             statusBox.classList.remove("error");
-            statusBox.textContent = "Advancing story...";
+            statusBox.textContent = T.advancing;
             nextBtn.disabled = true;
             const turnStartedAt = performance.now();
             let storyChoicesReady = false;
@@ -348,7 +352,7 @@
                 const data = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(data.error || "Step failed");
+                    throw new Error(data.error || T.stepFailed);
                 }
 
                 if (data.player) {
@@ -391,7 +395,7 @@
 
         currentRoomBtn.addEventListener("click", async () => {
             statusBox.classList.remove("error");
-            statusBox.textContent = "Checking current room...";
+            statusBox.textContent = T.checkingRoom;
             nextBtn.disabled = true;
             currentRoomBtn.disabled = true;
 
@@ -407,7 +411,7 @@
                 const data = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(data.error || "Room check failed");
+                    throw new Error(data.error || T.roomFailed);
                 }
 
                 if (data.player) {

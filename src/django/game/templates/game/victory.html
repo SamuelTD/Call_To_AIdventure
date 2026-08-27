@@ -1,8 +1,9 @@
+{% load ui_i18n %}{% load i18n %}{% get_current_language as LANGUAGE_CODE %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
     <meta charset="UTF-8">
-    <title>Victory - Call To AIdventure</title>
+    <title>{% ui "Victory" %} - Call To AIdventure</title>
     <style>
         body {
             margin: 0;
@@ -60,8 +61,9 @@
         <div class="panel">
             <h1>{{ adventure_name }}</h1>
             <div class="outro">{{ outro }}</div>
-            <a href="{% url 'landing' %}">Return to landing</a>
+            <a href="{% url 'landing' %}">{% ui "Return to landing" %}</a>
         </div>
     </div>
+    {% include "game/_language_toggle.html" %}
 </body>
 </html>
