@@ -24,11 +24,14 @@ if str(PROJECT_ROOT) not in sys.path:
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-e1+@%(y$z**z*k0qe0(8-gw2s$5e^3j)^^b1tff5i$c=mr=-a7'
+DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() in {"1", "true", "yes", "on"}
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
+if not SECRET_KEY:
+    if not DEBUG:
+        raise RuntimeError("DJANGO_SECRET_KEY is required when DJANGO_DEBUG is false")
+    SECRET_KEY = "django-insecure-development-only-change-me"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
 ALLOWED_HOSTS = [
     host.strip()
     for host in os.getenv(
@@ -187,3 +190,19 @@ LLM_SERVICE_UNAVAILABLE_MESSAGE = os.getenv(
     "LLM_SERVICE_UNAVAILABLE_MESSAGE",
     "The storyteller is temporarily unavailable. Your adventure is safe; please try again in a moment.",
 )
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "structured": {
+            "format": "time={asctime} level={levelname} logger={name} message={message}",
+            "style": "{",
+        },
+    },
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "structured"}},
+    "loggers": {
+        "agents": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "retrieval": {"handlers": ["console"], "level": "INFO", "propagate": False},
+    },
+}

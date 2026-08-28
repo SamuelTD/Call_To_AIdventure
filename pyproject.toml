@@ -10,6 +10,7 @@ dependencies = [
     "django-prometheus>=2.5.0",
     "dotenv>=0.9.9",
     "gradio>=5.49.1",
+    "gunicorn>=26.2.0",
     "langchain>=1.0.3",
     "langchain-chroma>=1.0.0",
     "langchain-community>=0.4.1",
@@ -24,3 +25,20 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+exclude = ["src/agents/game_master_graph_legacy.py", "src/ui/gradio_legacy.py"]
+
+[tool.coverage.run]
+source = ["agents", "retrieval", "observability", "game"]
+omit = ["*/migrations/*", "*legacy.py"]
+
+[tool.coverage.report]
+fail_under = 55
+skip_covered = true
+show_missing = true
+
+[dependency-groups]
+dev = [
+    "coverage>=7.15.4",
+]

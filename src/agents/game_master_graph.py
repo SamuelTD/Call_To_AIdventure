@@ -1,6 +1,7 @@
 #region IMPORTS
 import re
 import json
+import logging
 
 from dotenv import load_dotenv
 from langgraph.graph import StateGraph, START, END
@@ -49,6 +50,7 @@ from utils.pathing import project_path
 #endregion
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 
 #region CONFIG
@@ -179,8 +181,8 @@ def retrieve_rag_context(
             top_k=top_k,
         )
         return context.format_for_prompt()
-    except Exception as e:
-        print("ERROR RAG RETRIEVAL:", e)
+    except Exception:
+        logger.exception("RAG retrieval failed; continuing with empty context")
         return empty_rag_context()
 
 
@@ -195,8 +197,8 @@ def retrieve_known_location_context(
 
     try:
         return retrieve_location_context(location_id).format_for_prompt()
-    except Exception as e:
-        print("ERROR LOCATION CONTEXT:", e)
+    except Exception:
+        logger.exception("Location context failed; continuing with empty context")
         return empty_rag_context()
 
 
@@ -221,7 +223,7 @@ def make_choice(
         call_name="choice generation",
     )
 
-    print("DEBUG CHOICES ==", result)
+    logger.debug("Choice generation returned count=%s", len(result.choices))
     return result.choices
 
 def compress_history(history: list[str], language: str = "en") -> list[str]:
@@ -235,8 +237,8 @@ def compress_history(history: list[str], language: str = "en") -> list[str]:
             {"context": to_summarize},
             call_name="history compression",
         ).strip()
-    except Exception as e:
-        print("ERROR HISTORY COMPRESSION:", e)
+    except Exception:
+        logger.exception("History compression failed; retaining original history")
         return history
 
     second_last_user = history[-4]
@@ -259,7 +261,7 @@ def load_adv(id: str, print_text: bool = False):
         intro = f.read()
 
     if print_text:
-        print(intro)
+        logger.info("Adventure introduction loaded chars=%s", len(intro))
 
     return adv, intro
 
@@ -357,8 +359,8 @@ def step_get_input(state: GameState) -> GameState:
             rag_context,
             language,
         )
-    except Exception as e:
-        print("ERROR:", e)
+    except Exception:
+        logger.exception("Choice generation failed; using safe fallback choices")
         choices = (["Avancer prudemment", "Examiner les environs", "Se préparer au danger"] if language == "fr" else [
             "Move forward carefully", "Examine the surroundings", "Prepare for danger",
         ])
@@ -481,8 +483,8 @@ def step_evaluate_room_progression(state: GameState) -> GameState:
             {"full_prompt": prompt},
             call_name="room completion evaluation",
         )
-    except Exception as e:
-        print("ERROR ROOM EVALUATION:", e)
+    except Exception:
+        logger.exception("Room evaluation failed")
         return {}
 
     if not result.room_completed:
@@ -654,7 +656,7 @@ def step_generate_story(state: GameState) -> GameState:
 
     state.update(state_updates)
 
-    print("Story:", story, "\n")
+    logger.debug("Story generation completed chars=%s", len(story))
 
     return {
         "history": history + [f"You: {q}", f"Story: {story}"],
@@ -690,8 +692,8 @@ def step_evaluate_goals(state: GameState) -> GameState:
             call_name="goal evaluation",
         )
         completed_goals = completed_ongoing_goals(ongoing_goals, result.completed_goals)
-    except Exception as e:
-        print("ERROR GOAL EVALUATION:", e)
+    except Exception:
+        logger.exception("Goal evaluation failed")
         completed_goals = []
 
     if not completed_goals:

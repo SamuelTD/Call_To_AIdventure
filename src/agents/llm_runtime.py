@@ -1,5 +1,3 @@
-import os
-
 from dotenv import load_dotenv
 
 from langchain_openai import ChatOpenAI
@@ -16,12 +14,15 @@ from agents.prompts import (
 from agents.prompts.chooser import CHOOSER_TEMPLATE_FR
 from agents.prompts.summary import SUMMARY_TEMPLATE_FR
 from agents.llm_resilience import get_llm_setting
+from agents.runtime_config import AIRuntimeConfig
+from observability.llm_callback import AIUsageMetricsCallback
 
 load_dotenv()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.6-luna")
-OPENAI_REASONING_EFFORT = os.getenv("OPENAI_REASONING_EFFORT", "low")
+AI_CONFIG = AIRuntimeConfig.from_env()
+OPENAI_API_KEY = AI_CONFIG.openai_api_key
+OPENAI_MODEL = AI_CONFIG.openai_model
+OPENAI_REASONING_EFFORT = AI_CONFIG.reasoning_effort
 
 llm = ChatOpenAI(
     api_key=OPENAI_API_KEY,
@@ -30,6 +31,7 @@ llm = ChatOpenAI(
     use_responses_api=True,
     timeout=float(get_llm_setting("LLM_REQUEST_TIMEOUT_SECONDS", "30")),
     max_retries=int(get_llm_setting("LLM_PROVIDER_MAX_RETRIES", "0")),
+    callbacks=[AIUsageMetricsCallback()],
 )
 
 base_story_template = ChatPromptTemplate.from_template("{full_prompt}")

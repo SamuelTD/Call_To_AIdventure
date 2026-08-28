@@ -1,0 +1,78 @@
+name: Block 2 AI component
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_live_evaluation:
+        description: Run budget-controlled live model evaluation
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: {enable-cache: true}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: uv sync --frozen
+      - run: uv run ruff check src tests
+      - run: uv run python src/django/manage.py check
+      - run: PYTHONPATH=src uv run python -m retrieval.ingest --dry-run
+      - run: PYTHONPATH=src uv run python -m evaluation.runner --output evaluation/report.json
+      - run: uv run coverage run src/django/manage.py test game tests
+      - run: uv run coverage report
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deterministic-ai-evidence
+          path: |
+            evaluation/report.json
+            .coverage
+
+  container:
+    needs: deterministic-quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - run: docker run --rm --entrypoint /bin/promtool -v "$PWD/monitoring/prometheus:/config:ro" prom/prometheus:v3.5.0 check config /config/prometheus.yml
+      - run: docker run --rm --entrypoint /bin/amtool -v "$PWD/monitoring/alertmanager:/config:ro" prom/alertmanager:v0.28.1 check-config /config/alertmanager.yml
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: call-to-aidventure:${{ github.sha }}
+      - run: docker run -d --name aidventure -p 8000:8000 call-to-aidventure:${{ github.sha }}
+      - run: |
+          for attempt in 1 2 3 4 5 6; do
+            curl --fail http://127.0.0.1:8000/health && exit 0
+            sleep 5
+          done
+          docker logs aidventure
+          exit 1
+
+  live-evaluation:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_live_evaluation
+    needs: deterministic-quality
+    runs-on: ubuntu-latest
+    environment: ai-evaluation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: uv sync --frozen
+      - run: PYTHONPATH=src uv run python -m evaluation.runner --live --output evaluation/live-report.json
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+      - uses: actions/upload-artifact@v4
+        with: {name: live-ai-evaluation, path: evaluation/live-report.json}

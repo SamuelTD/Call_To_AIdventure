@@ -213,6 +213,11 @@ data/exports/
 training/
 
 *.pyc
-uv.lock
+# The dependency lock is delivery evidence and must be committed.
 
-certif/
+# Certification source PDFs and other working files stay local; the maintained
+# Block 2 analysis is intentionally versioned.
+certif/*
+!certif/block-2-technical-gap-analysis.md
+# Generated AI evaluation reports (retain as CI/release artifacts)
+evaluation/report.json

@@ -1,8 +1,7 @@
-from utils.player import Player, load_player
+from utils.player import Player
 from utils.monster import get_monster
 from utils.enums import PlayerAction
 import random as r
-from time import sleep
 from utils.python_utils import clear
 
 current_monster = ""

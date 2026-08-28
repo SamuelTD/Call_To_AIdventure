@@ -16,6 +16,7 @@ from .dataset_api import (
     MonsterCollectionView,
     MonsterDetailView,
 )
+from .ai_api import AIConfigurationView, AIHealthView, AIOpenApiView, AITurnView
 
 urlpatterns = [
     path("", LandingPageView.as_view(), name="landing"),
@@ -29,6 +30,10 @@ urlpatterns = [
     path("api/v1/monsters/", MonsterCollectionView.as_view(), name="api_v1_monsters"),
     path("api/v1/openapi.yaml", DatasetOpenApiView.as_view(), name="api_v1_openapi"),
     path("api/v1/docs/", DatasetApiDocsView.as_view(), name="api_v1_docs"),
+    path("api/v1/ai/health/", AIHealthView.as_view(), name="api_v1_ai_health"),
+    path("api/v1/ai/configuration/", AIConfigurationView.as_view(), name="api_v1_ai_configuration"),
+    path("api/v1/ai/openapi.yaml", AIOpenApiView.as_view(), name="api_v1_ai_openapi"),
+    path("api/v1/games/<int:game_id>/turns/", AITurnView.as_view(), name="api_v1_ai_turn"),
     path(
         "api/v1/monsters/<int:monster_id>/",
         MonsterDetailView.as_view(),
