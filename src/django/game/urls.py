@@ -9,6 +9,13 @@ from .views import (
     VictoryPageView, CharacterCreationOptionsView, DevAccountDashboardView,
     CharacterTemplateListView, CharacterTemplateSaveView,
     CharacterTemplateDeleteView, CurrentRoomView, StoryTurnMetricView)
+from .dataset_api import (
+    DatasetApiDocsView,
+    DatasetOpenApiView,
+    IngestionRunSummaryView,
+    MonsterCollectionView,
+    MonsterDetailView,
+)
 
 urlpatterns = [
     path("", LandingPageView.as_view(), name="landing"),
@@ -19,6 +26,19 @@ urlpatterns = [
     path("debug", DebugPageView.as_view(), name="debug"),
     path("_dev/accounts/", DevAccountDashboardView.as_view(), name="dev_accounts"),
     path("api/adventures/", AdventureListView.as_view(), name="api_adventures"),
+    path("api/v1/monsters/", MonsterCollectionView.as_view(), name="api_v1_monsters"),
+    path("api/v1/openapi.yaml", DatasetOpenApiView.as_view(), name="api_v1_openapi"),
+    path("api/v1/docs/", DatasetApiDocsView.as_view(), name="api_v1_docs"),
+    path(
+        "api/v1/monsters/<int:monster_id>/",
+        MonsterDetailView.as_view(),
+        name="api_v1_monster_detail",
+    ),
+    path(
+        "api/v1/ingestion-runs/<str:run_id>/summary/",
+        IngestionRunSummaryView.as_view(),
+        name="api_v1_ingestion_run_summary",
+    ),
     path("api/character-options/", CharacterCreationOptionsView.as_view(), name="api_character_options"),
     path("api/character-templates/", CharacterTemplateListView.as_view(), name="api_character_templates"),
     path("api/character-templates/save", CharacterTemplateSaveView.as_view(), name="api_character_template_save"),

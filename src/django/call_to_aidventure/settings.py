@@ -95,6 +95,11 @@ DATABASES = {
     }
 }
 
+# Read-only certification dataset built by ``python -m data_pipeline``.
+DATASET_DB_PATH = os.getenv(
+    "DB_PATH", str(PROJECT_ROOT.parent / "db" / "sqlite" / "data.db")
+)
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators

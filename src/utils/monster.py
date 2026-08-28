@@ -2,7 +2,7 @@ from pydantic import Field
 from utils.serialization import SerializableModel
 import sqlite3
 from typing import Optional, Tuple, List
-import os, json
+import json
 from dotenv import load_dotenv
 from utils.pathing import env_project_path
 
@@ -16,7 +16,7 @@ class Monster(SerializableModel):
     armor: int
     HP: int
     max_HP: int = Field(default=1)
-    challenge_rating: int
+    challenge_rating: float | None
     strength: int
     dexterity: int
     constitution: int
@@ -25,7 +25,7 @@ class Monster(SerializableModel):
     charisma: int
     description: str
     gold_loot: Tuple[int, int] = Field(default=(0,0))
-    items_loot : List[str] = Field(default=[])
+    items_loot: List[str] = Field(default_factory=list)
 
 def get_monster(name: str) -> Optional[Monster]:
     """
@@ -57,7 +57,6 @@ def get_monster(name: str) -> Optional[Monster]:
     # Now everything lines up with your Monster model
     monster = Monster(**data)
     monster.max_HP = monster.HP
-    print("MONSTER =  ", monster)
     return monster
 
 if __name__ == "__main__":

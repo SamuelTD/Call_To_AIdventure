@@ -19,7 +19,8 @@ ADDONS = {}
 #USER_AGENT = "monster_scraping (+http://www.yourdomain.com)"
 
 # Obey robots.txt rules
-ROBOTSTXT_OBEY = False
+ROBOTSTXT_OBEY = True
+USER_AGENT = "Call-To-AIdventure-certification-research/1.0"
 
 # Concurrency and throttling settings
 #CONCURRENT_REQUESTS = 16
@@ -52,20 +53,16 @@ AUTOTHROTTLE_TARGET_CONCURRENCY = 1.0
 
 # Enable or disable downloader middlewares
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
-DOWNLOADER_MIDDLEWARES = {
-    'scrapy.downloadermiddlewares.useragent.UserAgentMiddleware': None,
-    'scrapy_fake_useragent.middleware.RandomUserAgentMiddleware': 400
-}
+DOWNLOADER_MIDDLEWARES = {}
 
 RETRY_ENABLED = True
 RETRY_TIMES = 5
 RETRY_HTTP_CODES = [403, 429, 500, 502, 503, 504]
+DOWNLOAD_TIMEOUT = 20
 
 DEFAULT_REQUEST_HEADERS = {
    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
    'Accept-Language': 'en-US,en;q=0.5',
-   'Referer': 'https://the-site-you’re-scraping.com',
-   # maybe even cookies if you can log in manually first
 }
 
 # Enable or disable extensions

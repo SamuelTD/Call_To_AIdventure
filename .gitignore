@@ -208,6 +208,8 @@ __marimo__/
 
 db/chroma/
 db/sqlite/data.db
+data/pipeline/runs/
+data/exports/
 training/
 
 *.pyc
