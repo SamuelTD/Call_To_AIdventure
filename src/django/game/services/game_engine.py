@@ -12,11 +12,10 @@ from agents.game_master_graph import (
     GameState,
     build_pre_input_graph,
     build_post_input_graph,
-    initialize_graph_runtime
+    initialize_graph_runtime,
+    describe_current_room,
 )
-from langchain.agents import create_agent
-from agents.game_master_graph import tools
-from agents.llm_runtime import llm
+from agents.llm_resilience import TemporaryLLMServiceError
 
 class GameEngine:
 
@@ -36,9 +35,22 @@ class GameEngine:
         """
         Equivalent of the old step() function.
         """
-        state = self.post_graph.invoke(
-            input={**state, "latest_user": choice}
-        )
+        if state.get("should_end"):
+            mode = "adventure_victory" if state.get("end_reason") == "victory" else "gameover"
+            return {
+                "state": state,
+                "mode": mode,
+            }
+
+        try:
+            state = self.post_graph.invoke(
+                input={**state, "latest_user": choice}
+            )
+        except TemporaryLLMServiceError:
+            return {
+                "state": state,
+                "mode": "service_unavailable",
+            }
 
         # combat trigger
         if state["last_cmd"] == "combat":
@@ -50,13 +62,36 @@ class GameEngine:
 
         # run pre graph again
         state["last_choices"] = state["current_choices"]
-        state = self.pre_graph.invoke(input=state)
+        try:
+            state = self.pre_graph.invoke(input=state)
+        except TemporaryLLMServiceError:
+            return {
+                "state": state,
+                "mode": "service_unavailable",
+            }
 
         return {
             "state": state,
             "mode": "story",
             "story": state["current_story"],
             "choices": state["current_choices"],
+        }
+
+    def check_current_room(self, state):
+        try:
+            room_description = describe_current_room(state)
+        except TemporaryLLMServiceError:
+            return {
+                "state": state,
+                "mode": "service_unavailable",
+            }
+
+        state["current_story"] = room_description
+        return {
+            "state": state,
+            "mode": "story",
+            "story": room_description,
+            "choices": state.get("current_choices", []),
         }
     
     def start_combat(self, state):

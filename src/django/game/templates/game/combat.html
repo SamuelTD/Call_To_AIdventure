@@ -1,11 +1,12 @@
 {% load static %}
 
 
+{% load ui_i18n %}{% load i18n %}{% get_current_language as LANGUAGE_CODE %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
     <meta charset="UTF-8">
-    <title>Combat - Call To AIdventure</title>
+    <title>{% ui "Combat" %} - Call To AIdventure</title>
     <style>
         body {
             margin: 0;
@@ -192,69 +193,73 @@
 <body>
     <div class="page">
         <div class="title-bar">
-            <h1 id="combat-title">Combat</h1>
+            <h1 id="combat-title">{% ui "Combat" %}</h1>
         </div>
 
         <div class="layout">
             <div class="panel">
                 <div id="combat-fluff" class="combat-fluff hidden"></div>
-                <div id="combat-log" class="combat-log">Loading combat...</div>
+                <div id="combat-log" class="combat-log">{% ui "Loading combat..." %}</div>
 
                 <form id="combat-form">
                     <div id="combat-choices"></div>
 
                     <div class="action-row">
-                        <button type="submit" id="combat-btn">Next</button>
-                        <button type="button" id="return-play-btn" class="hidden">Continue</button>
-                        <a href="{% url 'landing' %}" id="return-landing-btn" class="button-link hidden">Return to title</a>
+                        <button type="submit" id="combat-btn">{% ui "Next" %}</button>
+                        <button type="button" id="return-play-btn" class="hidden">{% ui "Continue" %}</button>
+                        <a href="{% url 'landing' %}" id="return-landing-btn" class="button-link hidden">{% ui "Return to title" %}</a>
                     </div>
                 </form>
 
-                <div id="victory-box" class="victory-box hidden">Victory!</div>
-                <div id="defeat-box" class="defeat-box hidden">You died...</div>
+                <div id="victory-box" class="victory-box hidden">{% ui "Victory" %} !</div>
+                <div id="defeat-box" class="defeat-box hidden">{% ui "You were defeated." %}</div>
 
                 <div id="status" class="status"></div>
             </div>
 
             <div class="panel">
                 <div class="sheet-block">
-                    <h3>Enemy</h3>
-                    <div class="sheet-line"><strong>Name:</strong> <span id="monster-name"></span></div>
-                    <img id="monster-image" src="" alt="Monster image" style="width:100%; border-radius:8px; margin-top:12px; display:none;">
+                    <h3>{% ui "Enemy" %}</h3>
+                    <div class="sheet-line"><strong>{% ui "Name" %}:</strong> <span id="monster-name"></span></div>
+                    <img id="monster-image" src="" alt="{% ui 'Monster image' %}" style="width:100%; border-radius:8px; margin-top:12px; display:none;">
                 </div>
 
                 <div class="hp-block">
-                    <div class="hp-label">Player HP: <span id="player-hp-text"></span></div>
+                    <div class="hp-label">{% ui "Player HP" %}: <span id="player-hp-text"></span></div>
                     <div class="hp-bar-wrap">
                         <div id="player-hp-bar" class="hp-bar"></div>
                     </div>
                 </div>
 
                 <div class="hp-block">
-                    <div class="hp-label">Enemy HP: <span id="monster-hp-text"></span></div>
+                    <div class="hp-label">{% ui "Enemy HP" %}: <span id="monster-hp-text"></span></div>
                     <div class="hp-bar-wrap">
                         <div id="monster-hp-bar" class="hp-bar"></div>
                     </div>
                 </div>
 
                 <div class="sheet-block">
-                    <h3>Character Sheet</h3>
-                    <div class="sheet-line"><strong>Name:</strong> <span id="player-name"></span></div>
-                    <div class="sheet-line"><strong>Class:</strong> <span id="player-class"></span></div>
-                    <div class="sheet-line"><strong>Race:</strong> <span id="player-race"></span></div>
-                    <div class="sheet-line"><strong>Gold:</strong> <span id="player-gold"></span></div>
-                    <div class="sheet-line"><strong>Weapon:</strong> <span id="player-weapon"></span></div>
+                    <h3>{% ui "Character Sheet" %}</h3>
+                    <div class="sheet-line"><strong>{% ui "Name" %}:</strong> <span id="player-name"></span></div>
+                    <div class="sheet-line"><strong>{% ui "Class" %}:</strong> <span id="player-class"></span></div>
+                    <div class="sheet-line"><strong>{% ui "Race" %}:</strong> <span id="player-race"></span></div>
+                    <div class="sheet-line"><strong>{% ui "Gender" %}:</strong> <span id="player-gender"></span></div>
+                    <div class="sheet-line"><strong>{% ui "Gold" %}:</strong> <span id="player-gold"></span></div>
+                    <div class="sheet-line"><strong>{% ui "Weapon" %}:</strong> <span id="player-weapon"></span></div>
                 </div>
 
                 <div class="sheet-block">
-                    <h3>Inventory</h3>
+                    <h3>{% ui "Inventory" %}</h3>
                     <ul id="player-inventory" class="inventory"></ul>
                 </div>
             </div>
         </div>
     </div>
 
+    {% include "game/_language_toggle.html" %}
     <script>
+        const T = {combat:"{% ui 'Combat' %}",noActions:"{% ui 'No combat actions available.' %}",none:"{% ui 'None' %}",loading:"{% ui 'Loading combat...' %}",failedLoad:"{% ui 'Failed to load combat state' %}",starting:"{% ui 'Starting combat...' %}",failedStart:"{% ui 'Failed to start combat' %}",selectAction:"{% ui 'Please select a combat action.' %}",resolving:"{% ui 'Resolving combat...' %}",actionFailed:"{% ui 'Combat action failed' %}",won:"{% ui 'You won the fight.' %}",defeated:"{% ui 'You were defeated.' %}",returning:"{% ui 'Returning to the story...' %}",failedResume:"{% ui 'Failed to resume story' %}",labels:{Human:"{% ui 'Human' %}",Elf:"{% ui 'Elf' %}",Dwarf:"{% ui 'Dwarf' %}",Halfling:"{% ui 'Halfling' %}",Female:"{% ui 'Female' %}",Male:"{% ui 'Male' %}",fighter:"{% ui 'fighter' %}",rogue:"{% ui 'rogue' %}",wizard:"{% ui 'wizard' %}",attack:"{% ui 'attack' %}",defend:"{% ui 'defend' %}",use_item:"{% ui 'use_item' %}",fire_bolt:"{% ui 'fire_bolt' %}",Longsword:"{% ui 'Longsword' %}","Twin Daggers":"{% ui 'Twin Daggers' %}",Quarterstaff:"{% ui 'Quarterstaff' %}",Sword:"{% ui 'Sword' %}"}};
+        const displayLabel = value => T.labels[value] || value || "";
         const API_COMBAT_STATE_URL = "{% url 'api_combat_state' %}";
         const API_COMBAT_START_URL = "{% url 'api_combat_start' %}";
         const API_COMBAT_ACTION_URL = "{% url 'api_combat_action' %}";
@@ -283,6 +288,7 @@
         const playerName = document.getElementById("player-name");
         const playerClass = document.getElementById("player-class");
         const playerRace = document.getElementById("player-race");
+        const playerGender = document.getElementById("player-gender");
         const playerGold = document.getElementById("player-gold");
         const playerWeapon = document.getElementById("player-weapon");
         const playerInventory = document.getElementById("player-inventory");
@@ -299,7 +305,7 @@
             combatChoices.innerHTML = "";
 
             if (!choices || choices.length === 0) {
-                combatChoices.innerHTML = "<p>No combat actions available.</p>";
+                combatChoices.innerHTML = `<p>${T.noActions}</p>`;
                 return;
             }
 
@@ -314,7 +320,7 @@
                 input.checked = index === 0;
 
                 label.appendChild(input);
-                label.appendChild(document.createTextNode(choice));
+                label.appendChild(document.createTextNode(displayLabel(choice)));
                 combatChoices.appendChild(label);
             });
         }
@@ -323,10 +329,11 @@
             if (!player) return;
 
             playerName.textContent = player.name || "";
-            playerClass.textContent = player.class || "";
-            playerRace.textContent = player.race || "";
+            playerClass.textContent = displayLabel(player.class);
+            playerRace.textContent = displayLabel(player.race);
+            playerGender.textContent = displayLabel(player.gender);
             playerGold.textContent = player.gold ?? "";
-            playerWeapon.textContent = player.weapon || "";
+            playerWeapon.textContent = displayLabel(player.weapon);
 
             playerInventory.innerHTML = "";
             if (player.inventory && player.inventory.length > 0) {
@@ -337,14 +344,14 @@
                 }
             } else {
                 const li = document.createElement("li");
-                li.textContent = "None";
+                li.textContent = T.none;
                 playerInventory.appendChild(li);
             }
         }
 
         function renderCombatState(data) {
             const monsterImage = document.getElementById("monster-image");
-            combatTitle.textContent = data.monster_name ? `⚔️ ${data.monster_name}` : "Combat";
+            combatTitle.textContent = data.monster_name ? `⚔️ ${data.monster_name}` : T.combat;
             monsterName.textContent = data.monster_name || "";
 
             playerHpText.textContent = `${data.player_hp ?? 0}/${data.player_max_hp ?? 0}`;
@@ -365,14 +372,14 @@
         }
 
         async function loadCombatState() {
-            statusBox.textContent = "Loading combat...";
+            statusBox.textContent = T.loading;
 
             try {
                 const response = await fetch(API_COMBAT_STATE_URL);
                 const data = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(data.error || "Failed to load combat state");
+                    throw new Error(data.error || T.failedLoad);
                 }
 
                 renderCombatState(data);
@@ -395,7 +402,7 @@
             if (combatStarted) return;
             combatStarted = true;
 
-            statusBox.textContent = "Starting combat...";
+            statusBox.textContent = T.starting;
 
             try {
                 const response = await fetch(API_COMBAT_START_URL, {
@@ -408,7 +415,7 @@
                 const data = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(data.error || "Failed to start combat");
+                    throw new Error(data.error || T.failedStart);
                 }
 
                 renderCombatState(data);
@@ -427,13 +434,13 @@
 
             const selected = document.querySelector('input[name="combat_action"]:checked');
             if (!selected) {
-                statusBox.textContent = "Please select a combat action.";
+                statusBox.textContent = T.selectAction;
                 statusBox.classList.add("error");
                 return;
             }
 
             statusBox.classList.remove("error");
-            statusBox.textContent = "Resolving combat...";
+            statusBox.textContent = T.resolving;
             combatBtn.disabled = true;
 
             try {
@@ -450,7 +457,7 @@
                 const data = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(data.error || "Combat action failed");
+                    throw new Error(data.error || T.actionFailed);
                 }
 
                 renderCombatState(data);
@@ -469,14 +476,14 @@
                 if (data.mode === "victory") {
                     victoryBox.classList.remove("hidden");
                     returnPlayBtn.classList.remove("hidden");
-                    statusBox.textContent = "You won the fight.";
+                    statusBox.textContent = T.won;
                     return;
                 }
 
                 if (data.mode === "defeat") {
                     defeatBox.classList.remove("hidden");
                     returnLandingBtn.classList.remove("hidden");
-                    statusBox.textContent = "You were defeated.";
+                    statusBox.textContent = T.defeated;
                     return;
                 }
 
@@ -495,7 +502,7 @@
 
         returnPlayBtn.addEventListener("click", async () => {
             returnPlayBtn.disabled = true;
-            statusBox.textContent = "Returning to the story...";
+            statusBox.textContent = T.returning;
 
             try {
                 const response = await fetch(API_STEP_URL, {
@@ -511,7 +518,7 @@
                 const data = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(data.error || "Failed to resume story");
+                    throw new Error(data.error || T.failedResume);
                 }
 
                 window.location.href = PLAY_URL;

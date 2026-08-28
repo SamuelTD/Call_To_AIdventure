@@ -1,5 +1,6 @@
+{% load ui_i18n %}{% load i18n %}{% get_current_language as LANGUAGE_CODE %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ LANGUAGE_CODE }}">
 <head>
     <meta charset="UTF-8">
     <title>Call To AIdventure</title>
@@ -28,6 +29,57 @@
         h1 {
             margin-top: 0;
             font-size: 2rem;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+
+        .account-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            color: #bbb;
+            font-size: 0.95rem;
+        }
+
+        .account-link, .logout-button {
+            width: auto;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            background: #252525;
+            color: #eee;
+            font-size: 0.95rem;
+            font-weight: bold;
+            text-decoration: none;
+            line-height: 1.2;
+        }
+
+        .logout-form {
+            margin: 0;
+        }
+
+        .logout-button {
+            cursor: pointer;
+        }
+
+        @media (max-width: 640px) {
+            .top-bar {
+                display: block;
+            }
+
+            .account-actions {
+                justify-content: flex-start;
+                margin-top: 12px;
+            }
+
         }
 
         label {
@@ -63,7 +115,7 @@
             background: #5b3de0;
         }
 
-        button.hidden {
+        .hidden {
             display: none;
         }
 
@@ -87,41 +139,355 @@
         .error {
             color: #ff7b7b;
         }
+
+
+        .section-title {
+            margin: 24px 0 12px;
+            font-size: 1.25rem;
+        }
+
+        .save-tabs {
+            display: flex;
+            gap: 8px;
+            margin: 24px 0 12px;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            width: auto;
+            padding: 9px 12px;
+            background: #252525;
+            border: 1px solid #444;
+        }
+
+        .tab-btn.active {
+            background: #6d4aff;
+            border-color: #6d4aff;
+        }
+
+        .saved-games {
+            display: grid;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .save-card {
+            background: #151515;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 14px;
+        }
+
+        .save-card h3 {
+            margin: 0 0 8px;
+            font-size: 1.05rem;
+        }
+
+        .save-meta, .save-preview {
+            color: #bbb;
+            font-size: 0.92rem;
+            line-height: 1.4;
+        }
+
+        .save-preview {
+            margin-top: 8px;
+        }
+
+        .save-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .save-actions button {
+            width: auto;
+            padding: 9px 12px;
+            font-size: 0.95rem;
+        }
+
+        .delete-save-btn {
+            background: #3a2525;
+            border: 1px solid #623535;
+        }
+
+        .delete-save-btn:hover {
+            background: #4a2b2b;
+        }
+
+        .finished-save {
+            border-color: #4a3f2f;
+        }
+
+        .empty-saves {
+            color: #bbb;
+            margin-bottom: 24px;
+        }
     </style>
 </head>
 <body>
     <div class="page">
         <div class="panel">
-            <h1>🎲 Call To AIdventure</h1>
+            <div class="top-bar">
+                <h1>🎲 Call To AIdventure</h1>
 
-            <label for="adventure-select">Choose an adventure</label>
-            <select id="adventure-select">
-                <option value="">Loading adventures...</option>
-            </select>
-
-            <div id="intro-box" class="intro-box">
-                Select an adventure to see its introduction.
+                <div class="account-actions">
+                    {% if user.is_authenticated %}
+                        <span>{{ user.username }}</span>
+                        <form class="logout-form" method="post" action="{% url 'logout' %}">
+                            {% csrf_token %}
+                            <button class="logout-button" type="submit">{% ui "Log Out" %}</button>
+                        </form>
+                    {% else %}
+                        <a class="account-link" href="{% url 'login' %}">{% ui "Log In" %}</a>
+                        <a class="account-link" href="{% url 'signup' %}">{% ui "Create Account" %}</a>
+                    {% endif %}
+                </div>
             </div>
 
-            <div id="status" class="status"></div>
+            {% if user.is_authenticated %}
+                <div class="save-tabs" role="tablist" aria-label="{% ui 'Saved games' %}">
+                    <button id="new-adventure-tab" class="tab-btn active" type="button">{% ui "New Adventure" %}</button>
+                    <button id="active-saves-tab" class="tab-btn" type="button">{% ui "Continue Adventure" %}</button>
+                    <button id="history-saves-tab" class="tab-btn" type="button">{% ui "History" %}</button>
+                </div>
 
-            <button id="start-btn" class="hidden">Start Adventure</button>
+                <div id="active-saves-panel" class="hidden">
+                    <div id="saved-games" class="saved-games"></div>
+                    <div id="saved-games-empty" class="empty-saves hidden">{% ui "No saved games yet." %}</div>
+                </div>
+
+                <div id="new-adventure-panel">
+                    <label for="adventure-select">{% ui "Choose an adventure" %}</label>
+                    <select id="adventure-select">
+                        <option value="">{% ui "Loading adventures..." %}</option>
+                    </select>
+
+                    <div id="intro-box" class="intro-box">
+                        {% ui "Select an adventure to see its introduction." %}
+                    </div>
+
+                    <button id="start-btn" class="hidden">{% ui "Start Adventure" %}</button>
+                </div>
+
+                <div id="history-saves-panel" class="hidden">
+                    <div id="history-games" class="saved-games"></div>
+                    <div id="history-games-empty" class="empty-saves hidden">{% ui "No finished adventures yet." %}</div>
+                </div>
+            {% else %}
+                <h2 class="section-title">{% ui "Start New Adventure" %}</h2>
+                <label for="adventure-select">{% ui "Choose an adventure" %}</label>
+                <select id="adventure-select">
+                    <option value="">{% ui "Loading adventures..." %}</option>
+                </select>
+
+                <div id="intro-box" class="intro-box">
+                    {% ui "Select an adventure to see its introduction." %}
+                </div>
+
+                <button id="start-btn" class="hidden">{% ui "Start Adventure" %}</button>
+            {% endif %}
+
+            <div id="status" class="status"></div>
         </div>
     </div>
 
+    {% include "game/_language_toggle.html" %}
     <script>
+        const T = {
+            adventure: "{% ui 'Adventure' %}", adventurer: "{% ui 'Adventurer' %}", finished: "{% ui 'Finished' %}", updated: "{% ui 'Updated' %}",
+            continue: "{% ui 'Continue' %}", delete: "{% ui 'Delete' %}", endingFinished: "{% ui 'Ending: Finished' %}", begun: "{% ui 'The adventure has just begun.' %}",
+            endings: {"Ending: Finished":"{% ui 'Ending: Finished' %}","Ending: Victory":"{% ui 'Ending: Victory' %}","Ending: Death":"{% ui 'Ending: Death' %}","Ending: Defeat":"{% ui 'Ending: Defeat' %}"},
+            failedSaves: "{% ui 'Failed to load saved games' %}", loadingSave: "{% ui 'Loading saved game...' %}", failedSave: "{% ui 'Failed to load saved game' %}",
+            deletingSave: "{% ui 'Deleting saved game...' %}", failedDelete: "{% ui 'Failed to delete saved game' %}", loadingAdventures: "{% ui 'Loading adventures...' %}",
+            selectAdventure: "{% ui '-- Select an adventure --' %}", failedAdventures: "{% ui 'Failed to load adventures.' %}", introHint: "{% ui 'Select an adventure to see its introduction.' %}", noDescription: "{% ui 'No description available.' %}"
+        };
         const API_ADVENTURES_URL = "{% url 'api_adventures' %}";
-        const API_START_URL = "{% url 'api_start' %}";
+        const CHARACTER_CREATE_URL = "{% url 'character_create' %}";
+        const IS_AUTHENTICATED = {{ user.is_authenticated|yesno:"true,false" }};
+        const API_SAVES_URL = "{% url 'api_saves' %}";
+        const API_SAVE_LOAD_TEMPLATE = "{% url 'api_save_load' 0 %}";
+        const API_SAVE_DELETE_TEMPLATE = "{% url 'api_save_delete' 0 %}";
 
         const adventureSelect = document.getElementById("adventure-select");
         const introBox = document.getElementById("intro-box");
         const startBtn = document.getElementById("start-btn");
         const statusBox = document.getElementById("status");
+        const savedGames = document.getElementById("saved-games");
+        const savedGamesEmpty = document.getElementById("saved-games-empty");
+        const historyGames = document.getElementById("history-games");
+        const historyGamesEmpty = document.getElementById("history-games-empty");
+        const activeSavesTab = document.getElementById("active-saves-tab");
+        const newAdventureTab = document.getElementById("new-adventure-tab");
+        const historySavesTab = document.getElementById("history-saves-tab");
+        const activeSavesPanel = document.getElementById("active-saves-panel");
+        const newAdventurePanel = document.getElementById("new-adventure-panel");
+        const historySavesPanel = document.getElementById("history-saves-panel");
 
         let adventures = [];
+        function saveUrl(template, id) {
+            return template.replace("/0/", `/${id}/`);
+        }
+
+        function formatSaveDate(value) {
+            if (!value) return "";
+            return new Intl.DateTimeFormat(undefined, {
+                dateStyle: "medium",
+                timeStyle: "short"
+            }).format(new Date(value));
+        }
+
+        function showSaveTab(tabName) {
+            if (!activeSavesTab || !newAdventureTab || !historySavesTab || !activeSavesPanel || !newAdventurePanel || !historySavesPanel) return;
+
+            const showNewAdventure = tabName === "new";
+            const showHistory = tabName === "history";
+            activeSavesTab.classList.toggle("active", !showNewAdventure && !showHistory);
+            newAdventureTab.classList.toggle("active", showNewAdventure);
+            historySavesTab.classList.toggle("active", showHistory);
+            activeSavesPanel.classList.toggle("hidden", showNewAdventure || showHistory);
+            newAdventurePanel.classList.toggle("hidden", !showNewAdventure);
+            historySavesPanel.classList.toggle("hidden", !showHistory);
+        }
+
+        function renderSaveList(saves, container, emptyEl, allowContinue) {
+            if (!container || !emptyEl) return;
+
+            container.innerHTML = "";
+
+            if (!saves || saves.length === 0) {
+                emptyEl.classList.remove("hidden");
+                return;
+            }
+
+            emptyEl.classList.add("hidden");
+
+            for (const save of saves) {
+                const card = document.createElement("article");
+                card.className = "save-card";
+                if (save.is_finished) {
+                    card.classList.add("finished-save");
+                }
+
+                const title = document.createElement("h3");
+                title.textContent = save.adventure_name || T.adventure;
+
+                const meta = document.createElement("div");
+                meta.className = "save-meta";
+                const hp = save.player_hp == null ? "" : ` · HP ${save.player_hp}/${save.player_max_hp}`;
+                const dateLabel = save.is_finished ? T.finished : T.updated;
+                const dateValue = save.is_finished ? save.finished_at : save.updated_at;
+                meta.textContent = `${save.player_name || "Adventurer"}${hp} · ${dateLabel} ${formatSaveDate(dateValue)}`;
+
+                const preview = document.createElement("div");
+                preview.className = "save-preview";
+                preview.textContent = save.is_finished
+                    ? (T.endings[save.ending_reason] || save.ending_reason || T.endingFinished)
+                    : (save.story_preview || T.begun);
+
+                const actions = document.createElement("div");
+                actions.className = "save-actions";
+
+                if (allowContinue) {
+                    const continueBtn = document.createElement("button");
+                    continueBtn.type = "button";
+                    continueBtn.textContent = T.continue;
+                    continueBtn.addEventListener("click", () => loadSave(save.id));
+                    actions.appendChild(continueBtn);
+                }
+
+                const deleteBtn = document.createElement("button");
+                deleteBtn.type = "button";
+                deleteBtn.className = "delete-save-btn";
+                deleteBtn.textContent = T.delete;
+                deleteBtn.addEventListener("click", () => deleteSave(save.id));
+
+                actions.appendChild(deleteBtn);
+                card.appendChild(title);
+                card.appendChild(meta);
+                card.appendChild(preview);
+                card.appendChild(actions);
+                container.appendChild(card);
+            }
+        }
+
+        function renderSaves(activeSaves, historySaves) {
+            renderSaveList(activeSaves, savedGames, savedGamesEmpty, true);
+            renderSaveList(historySaves, historyGames, historyGamesEmpty, false);
+        }
+
+        async function loadSaves() {
+            if (!IS_AUTHENTICATED) return;
+
+            try {
+                const response = await fetch(API_SAVES_URL);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || T.failedSaves);
+                }
+
+                renderSaves(data.saves || [], data.history || []);
+            } catch (err) {
+                console.error(err);
+                statusBox.textContent = err.message;
+                statusBox.classList.add("error");
+            }
+        }
+
+        async function loadSave(id) {
+            statusBox.classList.remove("error");
+            statusBox.textContent = T.loadingSave;
+
+            try {
+                const response = await fetch(saveUrl(API_SAVE_LOAD_TEMPLATE, id), {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || T.failedSave);
+                }
+
+                window.location.href = data.redirect_url || "/play/";
+            } catch (err) {
+                console.error(err);
+                statusBox.textContent = err.message;
+                statusBox.classList.add("error");
+            }
+        }
+
+        async function deleteSave(id) {
+            statusBox.classList.remove("error");
+            statusBox.textContent = T.deletingSave;
+
+            try {
+                const response = await fetch(saveUrl(API_SAVE_DELETE_TEMPLATE, id), {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || T.failedDelete);
+                }
+
+                statusBox.textContent = "";
+                await loadSaves();
+            } catch (err) {
+                console.error(err);
+                statusBox.textContent = err.message;
+                statusBox.classList.add("error");
+            }
+        }
 
         async function loadAdventures() {
-            statusBox.textContent = "Loading adventures...";
+            statusBox.textContent = T.loadingAdventures;
 
             try {
                 const response = await fetch(API_ADVENTURES_URL);
@@ -129,7 +495,7 @@
 
                 adventures = data.adventures || [];
 
-                adventureSelect.innerHTML = '<option value="">-- Select an adventure --</option>';
+                adventureSelect.innerHTML = `<option value="">${T.selectAdventure}</option>`;
 
                 for (const adv of adventures) {
                     const option = document.createElement("option");
@@ -141,7 +507,7 @@
                 statusBox.textContent = "";
             } catch (err) {
                 console.error(err);
-                statusBox.textContent = "Failed to load adventures.";
+                statusBox.textContent = T.failedAdventures;
                 statusBox.classList.add("error");
             }
         }
@@ -151,50 +517,30 @@
             const adv = adventures.find(a => a.id === selectedId);
 
             if (!adv) {
-                introBox.textContent = "Select an adventure to see its introduction.";
+                introBox.textContent = T.introHint;
                 startBtn.classList.add("hidden");
                 return;
             }
 
-            introBox.textContent = adv.description || "No description available.";
+            introBox.textContent = adv.description || T.noDescription;
             startBtn.classList.remove("hidden");
         });
 
-        startBtn.addEventListener("click", async () => {
+        startBtn.addEventListener("click", () => {
             const selectedId = adventureSelect.value;
-
             if (!selectedId) return;
 
-            startBtn.disabled = true;
-            statusBox.textContent = "Starting adventure...";
-
-            try {
-                const response = await fetch(API_START_URL, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        adventure_id: selectedId
-                    })
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.error || "Failed to start adventure");
-                }
-
-                window.location.href = "/play/";
-            } catch (err) {
-                console.error(err);
-                statusBox.textContent = err.message;
-                statusBox.classList.add("error");
-                startBtn.disabled = false;
-            }
+            window.location.href = `${CHARACTER_CREATE_URL}?adventure_id=${encodeURIComponent(selectedId)}`;
         });
 
+        if (activeSavesTab && newAdventureTab && historySavesTab) {
+            activeSavesTab.addEventListener("click", () => showSaveTab("active"));
+            newAdventureTab.addEventListener("click", () => showSaveTab("new"));
+            historySavesTab.addEventListener("click", () => showSaveTab("history"));
+        }
+
         loadAdventures();
+        loadSaves();
     </script>
 </body>
 </html>

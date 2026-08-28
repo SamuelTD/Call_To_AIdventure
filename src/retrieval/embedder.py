@@ -22,6 +22,7 @@ def embed(text: str) -> List[float]:
         "model": EMBED_MODEL,
         "input": [text]
     }
+    resp = None
     try:
         resp = requests.post(url, json=payload)
         resp.raise_for_status()

@@ -23,7 +23,7 @@ The current operating surface is a Django web app under `src/django`.
 The game engine uses LangGraph to manage narrative turns:
 
 - `src/agents/game_master_graph.py` defines `GameState`, graph nodes, and graph builders.
-- `src/agents/llm_runtime.py` owns the Groq LLM, story chain, summary chain, chooser chain, and thinker agent factory.
+- `src/agents/llm_runtime.py` owns the OpenAI LLM, story chain, summary chain, chooser chain, and thinker agent factory.
 - `src/agents/prompts/` contains prompt templates and prompt builders.
 - `src/agents/tools.py` defines tool actions such as combat/no-op/heal.
 
@@ -68,8 +68,9 @@ The project expects Python 3.12 according to `pyproject.toml`.
 
 Important environment variables:
 
-- `GROQ_API_KEY`: required by `ChatGroq`.
-- `GROQ_MODEL`: model name used by the LLM runtime.
+- `OPENAI_API_KEY`: required by `ChatOpenAI`.
+- `OPENAI_MODEL`: model name used by the LLM runtime; defaults to `gpt-5.6-luna`.
+- `OPENAI_REASONING_EFFORT`: optional reasoning effort; defaults to `low`.
 - `DB_PATH`: SQLite path used by adventure and monster loading. The expected default shape is `db/sqlite/data.db`.
 - `OLLAMA_HOST`: optional, defaults to `http://localhost:11434` for retrieval embedding calls.
 - `EMBED_MODEL`: optional, defaults to `mxbai-embed-large:latest`.
@@ -138,4 +139,4 @@ For behavior changes, manually exercise:
 - a combat trigger if the change touches combat,
 - victory resume flow if the change touches post-combat state.
 
-Network-backed LLM calls require valid Groq environment variables, so distinguish import/config checks from full runtime verification.
+Network-backed LLM calls require valid OpenAI environment variables, so distinguish import/config checks from full runtime verification.

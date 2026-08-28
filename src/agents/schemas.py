@@ -26,3 +26,21 @@ class ChoiceOutput(BaseModel):
             raise ValueError("choices must be distinct")
 
         return cleaned
+
+
+class GoalEvaluationOutput(BaseModel):
+    completed_goals: List[str] = Field(
+        default_factory=list,
+        description="Goals from the provided ongoing goals list that are now clearly complete.",
+    )
+
+
+class RoomCompletionOutput(BaseModel):
+    room_completed: bool = Field(
+        default=False,
+        description="Whether the latest resolved narrative clearly completes the current room objective.",
+    )
+    reason: str = Field(
+        default="",
+        description="Short explanation grounded in the latest narrative.",
+    )

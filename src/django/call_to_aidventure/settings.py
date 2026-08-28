@@ -11,7 +11,8 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
-import sys, os
+import os
+import sys
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -28,12 +29,20 @@ SECRET_KEY = 'django-insecure-e1+@%(y$z**z*k0qe0(8-gw2s$5e^3j)^^b1tff5i$c=mr=-a7
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv(
+        "DJANGO_ALLOWED_HOSTS",
+        "localhost,127.0.0.1,0.0.0.0,host.docker.internal",
+    ).split(",")
+    if host.strip()
+]
 
 
 # Application definition
 
 INSTALLED_APPS = [
+    "django_prometheus",
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -44,13 +53,16 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "django_prometheus.middleware.PrometheusBeforeMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "django_prometheus.middleware.PrometheusAfterMiddleware",
 ]
 
 ROOT_URLCONF = 'call_to_aidventure.urls'
@@ -78,7 +90,7 @@ WSGI_APPLICATION = 'call_to_aidventure.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
+        'ENGINE': 'django_prometheus.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
@@ -108,6 +120,11 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
+LANGUAGES = [
+    ("en", "English"),
+    ("fr", "Français"),
+]
+
 TIME_ZONE = 'Europe/Paris'
 
 USE_I18N = True
@@ -124,3 +141,44 @@ STATIC_URL = '/static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+LOGIN_URL = "/accounts/login/"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/"
+
+
+def env_int(name, default):
+    return int(os.getenv(name, default))
+
+
+def env_float(name, default):
+    return float(os.getenv(name, default))
+
+
+def env_csv(name, default):
+    value = os.getenv(name, default)
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+LLM_REQUEST_TIMEOUT_SECONDS = env_float("LLM_REQUEST_TIMEOUT_SECONDS", "30")
+LLM_PROVIDER_MAX_RETRIES = env_int("LLM_PROVIDER_MAX_RETRIES", "0")
+LLM_RETRY_MAX_ATTEMPTS = env_int("LLM_RETRY_MAX_ATTEMPTS", "3")
+LLM_RETRY_INITIAL_DELAY_SECONDS = env_float("LLM_RETRY_INITIAL_DELAY_SECONDS", "0.5")
+LLM_RETRY_BACKOFF_MULTIPLIER = env_float("LLM_RETRY_BACKOFF_MULTIPLIER", "2")
+LLM_RETRY_MAX_DELAY_SECONDS = env_float("LLM_RETRY_MAX_DELAY_SECONDS", "4")
+LLM_RETRY_JITTER_SECONDS = env_float("LLM_RETRY_JITTER_SECONDS", "0.25")
+LLM_TRANSIENT_ERROR_KEYWORDS = env_csv(
+    "LLM_TRANSIENT_ERROR_KEYWORDS",
+    "timeout,timed out,rate limit,too many requests,temporarily unavailable,service unavailable,"
+    "connection error,connection reset,connection aborted,server error,internal server error,"
+    "bad gateway,gateway timeout,try again",
+)
+LLM_TRANSIENT_STATUS_CODES = [
+    int(status_code)
+    for status_code in env_csv("LLM_TRANSIENT_STATUS_CODES", "408,409,425,429,500,502,503,504")
+]
+LLM_SERVICE_UNAVAILABLE_STATUS_CODE = env_int("LLM_SERVICE_UNAVAILABLE_STATUS_CODE", "503")
+LLM_SERVICE_UNAVAILABLE_MESSAGE = os.getenv(
+    "LLM_SERVICE_UNAVAILABLE_MESSAGE",
+    "The storyteller is temporarily unavailable. Your adventure is safe; please try again in a moment.",
+)

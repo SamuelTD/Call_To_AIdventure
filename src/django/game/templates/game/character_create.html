@@ -1,0 +1,610 @@
+{% load ui_i18n %}{% load i18n %}{% get_current_language as LANGUAGE_CODE %}
+<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE }}">
+<head>
+    <meta charset="UTF-8">
+    <title>{% ui "Create Character" %} - Call To AIdventure</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: #eee;
+        }
+
+        .page {
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 24px;
+        }
+
+        .top-links {
+            margin-bottom: 16px;
+        }
+
+        .top-links a {
+            color: #b8a7ff;
+            text-decoration: none;
+        }
+
+        .top-links a:hover {
+            text-decoration: underline;
+        }
+
+        .panel {
+            background: #1c1c1c;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            font-size: 2rem;
+        }
+
+        .adventure-name {
+            color: #bbb;
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        input, select, button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+        input, select {
+            background: #222;
+            color: #eee;
+            margin-bottom: 20px;
+        }
+
+        input::placeholder {
+            color: #777;
+        }
+
+        button {
+            background: #6d4aff;
+            color: white;
+            cursor: pointer;
+            border: none;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background: #5b3de0;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .character-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0 14px;
+        }
+
+        .creator-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            width: auto;
+            padding: 9px 12px;
+            background: #252525;
+            border: 1px solid #444;
+        }
+
+        .tab-btn.active {
+            background: #6d4aff;
+            border-color: #6d4aff;
+        }
+
+        .tab-panel.hidden {
+            display: none;
+        }
+
+        .template-list {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .template-card {
+            position: relative;
+            background: #151515;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 14px;
+        }
+
+        .template-card h3 {
+            margin: 0 0 8px;
+            font-size: 1.05rem;
+        }
+
+        .template-meta {
+            color: #bbb;
+            font-size: 0.92rem;
+            line-height: 1.45;
+            margin-bottom: 12px;
+        }
+
+        .delete-template-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 30px;
+            height: 30px;
+            padding: 0;
+            border-radius: 999px;
+            border: 1px solid #7a2c2c;
+            background: #4a2020;
+            color: #ffb3b3;
+            line-height: 1;
+            font-size: 1.1rem;
+        }
+
+        .delete-template-btn:hover {
+            background: #6b2929;
+        }
+
+        .empty-templates {
+            color: #bbb;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .actions a, .actions button {
+            flex: 1;
+        }
+
+        .secondary-link {
+            display: block;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            background: #252525;
+            color: #eee;
+            text-align: center;
+            text-decoration: none;
+            box-sizing: border-box;
+            font-weight: bold;
+        }
+
+        .template-button {
+            background: #252525;
+            border: 1px solid #555;
+        }
+
+        .template-button:hover:not(:disabled) {
+            background: #303030;
+        }
+
+        .status {
+            margin-top: 14px;
+            color: #bbb;
+        }
+
+        .error {
+            color: #ff7b7b;
+        }
+
+        @media (max-width: 640px) {
+            .character-grid, .template-list {
+                grid-template-columns: 1fr;
+            }
+
+            .actions {
+                display: block;
+            }
+
+            .secondary-link {
+                margin-bottom: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="top-links">
+            <a href="{% url 'landing' %}">← {% ui "Back to adventure selection" %}</a>
+        </div>
+
+        <div class="panel">
+            <h1>{% ui "Create Character" %}</h1>
+            <div class="adventure-name">
+                {% if adventure %}
+                    {{ adventure.name }}
+                {% else %}
+                    {% ui "Choose an adventure before creating a character." %}
+                {% endif %}
+            </div>
+
+            {% if adventure %}
+                <div class="creator-tabs" role="tablist" aria-label="{% ui 'Character creation' %}">
+                    <button id="new-character-tab" class="tab-btn active" type="button">{% ui "New Character" %}</button>
+                    <button id="templates-tab" class="tab-btn" type="button">{% ui "Character Templates" %}</button>
+                </div>
+
+                <div id="new-character-panel" class="tab-panel">
+                    <form id="character-form">
+                        <label for="character-name">{% ui "Name" %}</label>
+                        <input id="character-name" name="name" type="text" maxlength="60" placeholder="Stan" autocomplete="off" required>
+
+                        <div class="character-grid">
+                            <div>
+                                <label for="character-race">{% ui "Race" %}</label>
+                                <select id="character-race" name="race" required></select>
+                            </div>
+
+                            <div>
+                                <label for="character-class">{% ui "Class" %}</label>
+                                <select id="character-class" name="class" required></select>
+                            </div>
+
+                            <div>
+                                <label for="character-gender">{% ui "Gender" %}</label>
+                                <select id="character-gender" name="gender" required></select>
+                            </div>
+                        </div>
+
+                        <div class="actions">
+                            <a class="secondary-link" href="{% url 'landing' %}">{% ui "Change Adventure" %}</a>
+                            {% if user.is_authenticated %}
+                                <button type="button" id="save-template-btn" class="template-button" disabled>{% ui "Save Template" %}</button>
+                            {% endif %}
+                            <button type="submit" id="finish-btn">{% ui "Finish" %}</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div id="templates-panel" class="tab-panel hidden">
+                    <div id="template-list" class="template-list"></div>
+                    <div id="empty-templates" class="empty-templates hidden">{% ui "No character templates available." %}</div>
+                </div>
+            {% endif %}
+
+            <div id="status" class="status"></div>
+        </div>
+    </div>
+
+    {% include "game/_language_toggle.html" %}
+    <script>
+        const T = {
+            failedOptions: "{% ui 'Failed to load character options' %}", saving: "{% ui 'Saving template...' %}", failedSave: "{% ui 'Failed to save template' %}",
+            alreadySaved: "{% ui 'Template already saved.' %}", saved: "{% ui 'Template saved.' %}", updated: "{% ui 'Template updated.' %}",
+            starting: "{% ui 'Starting adventure...' %}", failedStart: "{% ui 'Failed to start adventure' %}", deleteLabel: "{% ui 'Delete' %}", deleteTemplate: "{% ui 'Delete template' %}",
+            deleting: "{% ui 'Deleting template...' %}", failedDelete: "{% ui 'Failed to delete template' %}", useCharacter: "{% ui 'Use This Character' %}",
+            failedTemplates: "{% ui 'Failed to load character templates' %}",
+            labels: {Human: "{% ui 'Human' %}", Elf: "{% ui 'Elf' %}", Dwarf: "{% ui 'Dwarf' %}", Halfling: "{% ui 'Halfling' %}", Female: "{% ui 'Female' %}", Male: "{% ui 'Male' %}", fighter: "{% ui 'fighter' %}", rogue: "{% ui 'rogue' %}", wizard: "{% ui 'wizard' %}"}
+        };
+        const API_CHARACTER_OPTIONS_URL = "{% url 'api_character_options' %}";
+        const API_CHARACTER_TEMPLATES_URL = "{% url 'api_character_templates' %}";
+        const API_CHARACTER_TEMPLATE_DELETE_TEMPLATE = "{% url 'api_character_template_delete' 0 %}";
+        const API_START_URL = "{% url 'api_start' %}";
+        const API_SAVE_TEMPLATE_URL = "{% url 'api_character_template_save' %}";
+        const ADVENTURE_ID = "{{ adventure_id|escapejs }}";
+        const CAN_SAVE_TEMPLATES = {{ user.is_authenticated|yesno:"true,false" }};
+
+        const characterForm = document.getElementById("character-form");
+        const characterName = document.getElementById("character-name");
+        const characterRace = document.getElementById("character-race");
+        const characterClass = document.getElementById("character-class");
+        const characterGender = document.getElementById("character-gender");
+        const saveTemplateBtn = document.getElementById("save-template-btn");
+        const finishBtn = document.getElementById("finish-btn");
+        const newCharacterTab = document.getElementById("new-character-tab");
+        const templatesTab = document.getElementById("templates-tab");
+        const newCharacterPanel = document.getElementById("new-character-panel");
+        const templatesPanel = document.getElementById("templates-panel");
+        const templateList = document.getElementById("template-list");
+        const emptyTemplates = document.getElementById("empty-templates");
+        const statusBox = document.getElementById("status");
+
+        function titleCase(value) {
+            if (T.labels[value]) return T.labels[value];
+            return value
+                .replaceAll("_", " ")
+                .replace(/\b\w/g, letter => letter.toUpperCase());
+        }
+
+        function populateSelect(selectEl, values, formatter = value => value) {
+            selectEl.innerHTML = "";
+
+            for (const value of values) {
+                const option = document.createElement("option");
+                option.value = value;
+                option.textContent = formatter(value);
+                selectEl.appendChild(option);
+            }
+        }
+
+        function templateDeleteUrl(id) {
+            return API_CHARACTER_TEMPLATE_DELETE_TEMPLATE.replace("/0/", `/${id}/`);
+        }
+
+        function showTab(tabName) {
+            const showTemplates = tabName === "templates";
+            newCharacterTab.classList.toggle("active", !showTemplates);
+            templatesTab.classList.toggle("active", showTemplates);
+            newCharacterPanel.classList.toggle("hidden", showTemplates);
+            templatesPanel.classList.toggle("hidden", !showTemplates);
+            statusBox.textContent = "";
+            statusBox.classList.remove("error");
+        }
+
+        async function loadCharacterOptions() {
+            if (!characterForm) return;
+
+            try {
+                const response = await fetch(API_CHARACTER_OPTIONS_URL);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || T.failedOptions);
+                }
+
+                populateSelect(characterRace, data.races || [], titleCase);
+                populateSelect(characterClass, data.classes || [], titleCase);
+                populateSelect(characterGender, data.genders || [], titleCase);
+                updateTemplateButtonState();
+            } catch (err) {
+                console.error(err);
+                statusBox.textContent = err.message;
+                statusBox.classList.add("error");
+            }
+        }
+
+        function getCharacterPayload() {
+            return {
+                name: characterName.value,
+                race: characterRace.value,
+                class: characterClass.value,
+                gender: characterGender.value
+            };
+        }
+
+        function isCharacterComplete() {
+            const character = getCharacterPayload();
+            return Boolean(
+                character.name.trim()
+                && character.race
+                && character.class
+                && character.gender
+            );
+        }
+
+        function updateTemplateButtonState() {
+            if (!saveTemplateBtn) return;
+            saveTemplateBtn.disabled = !isCharacterComplete();
+        }
+
+        async function saveTemplate() {
+            if (!CAN_SAVE_TEMPLATES || !saveTemplateBtn) return;
+
+            if (!isCharacterComplete()) {
+                characterForm.reportValidity();
+                updateTemplateButtonState();
+                return;
+            }
+
+            saveTemplateBtn.disabled = true;
+            statusBox.classList.remove("error");
+            statusBox.textContent = T.saving;
+
+            try {
+                const response = await fetch(API_SAVE_TEMPLATE_URL, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        character: getCharacterPayload()
+                    })
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || T.failedSave);
+                }
+
+                if (data.skipped) {
+                    statusBox.textContent = T.alreadySaved;
+                } else {
+                    statusBox.textContent = data.created ? T.saved : T.updated;
+                    await loadCharacterTemplates();
+                }
+            } catch (err) {
+                console.error(err);
+                statusBox.textContent = err.message;
+                statusBox.classList.add("error");
+            } finally {
+                updateTemplateButtonState();
+            }
+        }
+
+        async function startAdventure(character) {
+            statusBox.classList.remove("error");
+            statusBox.textContent = T.starting;
+
+            const response = await fetch(API_START_URL, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    adventure_id: ADVENTURE_ID,
+                    character
+                })
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || T.failedStart);
+            }
+
+            window.location.href = "{% url 'play' %}";
+        }
+
+        function renderCharacterTemplates(templates) {
+            templateList.innerHTML = "";
+
+            if (!templates || templates.length === 0) {
+                emptyTemplates.classList.remove("hidden");
+                return;
+            }
+
+            emptyTemplates.classList.add("hidden");
+
+            for (const template of templates) {
+                const card = document.createElement("article");
+                card.className = "template-card";
+
+                if (!template.is_generic) {
+                    const deleteButton = document.createElement("button");
+                    deleteButton.type = "button";
+                    deleteButton.className = "delete-template-btn";
+                    deleteButton.setAttribute("aria-label", `${T.deleteLabel} ${template.name}`);
+                    deleteButton.title = T.deleteTemplate;
+                    deleteButton.textContent = "×";
+                    deleteButton.addEventListener("click", async () => {
+                        deleteButton.disabled = true;
+                        statusBox.classList.remove("error");
+                        statusBox.textContent = T.deleting;
+
+                        try {
+                            const response = await fetch(templateDeleteUrl(template.id), {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/json"
+                                }
+                            });
+                            const data = await response.json();
+
+                            if (!response.ok) {
+                                throw new Error(data.error || T.failedDelete);
+                            }
+
+                            statusBox.textContent = "";
+                            await loadCharacterTemplates();
+                        } catch (err) {
+                            console.error(err);
+                            statusBox.textContent = err.message;
+                            statusBox.classList.add("error");
+                            deleteButton.disabled = false;
+                        }
+                    });
+                    card.appendChild(deleteButton);
+                }
+
+                const title = document.createElement("h3");
+                title.textContent = template.name;
+
+                const meta = document.createElement("div");
+                meta.className = "template-meta";
+                meta.textContent = `${titleCase(template.gender)} ${titleCase(template.race)} ${titleCase(template.class)}`;
+
+                const useButton = document.createElement("button");
+                useButton.type = "button";
+                useButton.textContent = T.useCharacter;
+                useButton.addEventListener("click", async () => {
+                    useButton.disabled = true;
+                    try {
+                        await startAdventure({
+                            name: template.name,
+                            race: template.race,
+                            class: template.class,
+                            gender: template.gender
+                        });
+                    } catch (err) {
+                        console.error(err);
+                        statusBox.textContent = err.message;
+                        statusBox.classList.add("error");
+                        useButton.disabled = false;
+                    }
+                });
+
+                card.appendChild(title);
+                card.appendChild(meta);
+                card.appendChild(useButton);
+                templateList.appendChild(card);
+            }
+        }
+
+        async function loadCharacterTemplates() {
+            if (!templateList) return;
+
+            try {
+                const response = await fetch(API_CHARACTER_TEMPLATES_URL);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || T.failedTemplates);
+                }
+
+                renderCharacterTemplates(data.templates || []);
+            } catch (err) {
+                console.error(err);
+                statusBox.textContent = err.message;
+                statusBox.classList.add("error");
+            }
+        }
+
+        if (characterForm) {
+            newCharacterTab.addEventListener("click", () => showTab("new"));
+            templatesTab.addEventListener("click", () => showTab("templates"));
+            characterName.addEventListener("input", updateTemplateButtonState);
+            characterRace.addEventListener("change", updateTemplateButtonState);
+            characterClass.addEventListener("change", updateTemplateButtonState);
+            characterGender.addEventListener("change", updateTemplateButtonState);
+            if (saveTemplateBtn) {
+                saveTemplateBtn.addEventListener("click", saveTemplate);
+            }
+
+            characterForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+
+                finishBtn.disabled = true;
+                statusBox.classList.remove("error");
+                statusBox.textContent = T.starting;
+
+                try {
+                    await startAdventure(getCharacterPayload());
+                } catch (err) {
+                    console.error(err);
+                    statusBox.textContent = err.message;
+                    statusBox.classList.add("error");
+                    finishBtn.disabled = false;
+                }
+            });
+        }
+
+        loadCharacterOptions();
+        loadCharacterTemplates();
+    </script>
+</body>
+</html>

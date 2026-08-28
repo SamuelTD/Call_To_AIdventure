@@ -1,6 +1,8 @@
+import argparse
 import sqlite3
 import json
 import re
+from pathlib import Path
 
 
 def parse_bonus(value: str) -> int:
@@ -57,13 +59,20 @@ def create_schema(conn: sqlite3.Connection) -> None:
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     description TEXT,
+    goals TEXT NOT NULL,
     monsters TEXT NOT NULL,
-    npcs TEXT NOT NULL,
+    characters TEXT NOT NULL,
     locations TEXT NOT NULL,
     items TEXT NOT NULL,
     tags TEXT NOT NULL  
     );
     """)
+    conn.commit()
+
+
+def reset_schema(conn: sqlite3.Connection) -> None:
+    conn.execute("DROP TABLE IF EXISTS adventures")
+    conn.execute("DROP TABLE IF EXISTS monsters")
     conn.commit()
 
 
@@ -94,13 +103,13 @@ def load_monsters(
             gold_min = m.get("gold_loot")[0]
             gold_max = m.get("gold_loot")[1]
             
-        except:
+        except (TypeError, IndexError):
             gold_min = 0
             gold_max = 1
         
         try:
             loot = json.dumps(m.get("items_loot"))
-        except:
+        except TypeError:
             loot = json.dumps(["debug loot item"])
         conn.execute(insert_sql, (
             m.get("name"),
@@ -121,10 +130,80 @@ def load_monsters(
     conn.commit()
 
 
-if __name__ == "__main__":
-    # Initialize and populate the database
-    conn = sqlite3.connect("db/sqlite/data.db")
+def load_adventures(
+    conn: sqlite3.Connection,
+    adventures_dir: str = "data/world/adventures",
+) -> None:
+    insert_sql = """
+      INSERT OR REPLACE INTO adventures
+      (id, name, description, goals, monsters, characters, locations, items, tags)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """
+
+    for adventure_dir in sorted(Path(adventures_dir).iterdir()):
+        if not adventure_dir.is_dir():
+            continue
+
+        adventure_path = adventure_dir / f"{adventure_dir.name}.json"
+        if not adventure_path.exists():
+            continue
+
+        with adventure_path.open(encoding="utf-8") as file:
+            adventure = json.load(file)
+
+        conn.execute(insert_sql, (
+            adventure["id"],
+            adventure["name"],
+            adventure.get("description"),
+            json.dumps(adventure["goals"]),
+            json.dumps(adventure["monsters"]),
+            json.dumps(adventure["characters"]),
+            json.dumps(adventure["locations"]),
+            json.dumps(adventure["items"]),
+            json.dumps(adventure["tags"]),
+        ))
+
+    conn.commit()
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Create and populate the Call To AIdventure SQLite database."
+    )
+    parser.add_argument(
+        "--db-path",
+        default="db/sqlite/data.db",
+        help="SQLite database path.",
+    )
+    parser.add_argument(
+        "--monsters-json",
+        default="data/documents/monsters.json",
+        help="Monster source JSON path.",
+    )
+    parser.add_argument(
+        "--adventures-dir",
+        default="data/world/adventures",
+        help="Adventure source directory.",
+    )
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Drop and recreate supported tables before loading data.",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+    conn = sqlite3.connect(args.db_path)
+    if args.reset:
+        reset_schema(conn)
     create_schema(conn)
-    load_monsters(conn)
+    load_monsters(conn, args.monsters_json)
+    load_adventures(conn, args.adventures_dir)
     conn.close()
-    print("Database created and monster stats loaded.")
+    print("Database created and game data loaded.")
+
+
+if __name__ == "__main__":
+    main()

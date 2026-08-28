@@ -1,0 +1,13 @@
+{% load ui_i18n %}{% load i18n %}{% get_current_language as LANGUAGE_CODE %}
+<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE }}">
+<head>
+    <meta charset="UTF-8">
+    <title>{% ui "Logged Out" %} - Call To AIdventure</title>
+    <meta http-equiv="refresh" content="0; url={% url 'landing' %}">
+</head>
+<body>
+    <p>{% ui "You are logged out." %} <a href="{% url 'landing' %}">{% ui "Return to adventures" %}</a>.</p>
+    {% include "game/_language_toggle.html" %}
+</body>
+</html>

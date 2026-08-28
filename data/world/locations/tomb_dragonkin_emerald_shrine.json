@@ -1,0 +1,66 @@
+{
+  "id": "tomb_dragonkin_emerald_shrine",
+  "type": "location",
+  "name": "Emerald Shrine",
+  "region": "Tomb of Dragonkin",
+  "description": "A round burial shrine opens beneath a cracked dome painted with green stars. At its center, a stone bier holds a sword-shaped hollow that shines with emerald light.",
+  "monsters": [
+    "Ghoul",
+    "Zombie"
+  ],
+  "challenges": [
+    "The sword-shaped hollow demands proof of courage before it releases the Emerald Sword.",
+    "Disturbing the bier wakes the dead guardians sealed in the wall niches."
+  ],
+  "clues": [
+    "A kneeling knight mosaic points its blade toward the bier and its shield toward a hidden release stone.",
+    "The emerald light brightens when a living hand is placed on the dragon oath carved into the bier."
+  ],
+  "loot": [
+    "The fabled Emerald Sword."
+  ],
+  "history": {
+    "founding": null,
+    "notable_events": [
+      {
+        "year": null,
+        "event": "The Emerald Sword was sealed here after the last Dragonkin lord fell, awaiting a claimant brave enough to bear it."
+      }
+    ]
+  },
+  "features": [
+    {
+      "feature_id": "stone_bier",
+      "name": "Stone Bier",
+      "description": "A dragon-carved slab containing the glowing hollow where the Emerald Sword rests."
+    },
+    {
+      "feature_id": "guardian_niches",
+      "name": "Guardian Niches",
+      "description": "Narrow burial alcoves holding the wrapped dead of ancient tomb sentinels."
+    }
+  ],
+  "inhabitants": [],
+  "connections": {
+    "adjacent_locations": [
+      "tomb_dragonkin_scale_hall"
+    ],
+    "secret_passages": []
+  },
+  "completion": {
+    "objective": "Claim the Emerald Sword from the stone bier.",
+    "signals": [
+      "the Emerald Sword is released",
+      "the player takes the Emerald Sword",
+      "the sword is claimed from the bier",
+      "the shrine's guardians are overcome and the sword is taken"
+    ]
+  },
+  "tags": [
+    "dungeon",
+    "shrine",
+    "dragonkin",
+    "treasure",
+    "boss"
+  ]
+}

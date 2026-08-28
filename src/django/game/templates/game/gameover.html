@@ -1,0 +1,67 @@
+{% load ui_i18n %}{% load i18n %}{% get_current_language as LANGUAGE_CODE %}
+<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE }}">
+<head>
+    <meta charset="UTF-8">
+    <title>{% ui "Game Over" %} - Call To AIdventure</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: #eee;
+        }
+
+        .page {
+            max-width: 760px;
+            margin: 80px auto;
+            padding: 24px;
+        }
+
+        .panel {
+            background: #1c1c1c;
+            border: 1px solid #3a2525;
+            border-radius: 10px;
+            padding: 28px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+            text-align: center;
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 2.2rem;
+            color: #ff8f8f;
+        }
+
+        p {
+            line-height: 1.6;
+            color: #ccc;
+        }
+
+        a {
+            display: inline-block;
+            margin-top: 18px;
+            padding: 12px 18px;
+            border-radius: 8px;
+            background: #6d4aff;
+            color: white;
+            font-weight: bold;
+            text-decoration: none;
+        }
+
+        a:hover {
+            background: #5b3de0;
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="panel">
+            <h1>{% ui "Game Over" %}</h1>
+            <p>{% ui "Your adventure ends here." %}</p>
+            <a href="{% url 'landing' %}">{% ui "Return to landing" %}</a>
+        </div>
+    </div>
+    {% include "game/_language_toggle.html" %}
+</body>
+</html>

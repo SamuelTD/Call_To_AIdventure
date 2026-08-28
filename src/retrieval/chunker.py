@@ -1,206 +1,239 @@
+import hashlib
 import json
-from typing import List, Dict, Any
+from pathlib import Path
 
-# A simple, tokenizer-free chunker based on word counts
-# This avoids external dependencies on Hugging Face tokenizers.
-
-def chunk_text(text: str, max_words: int = 300) -> List[str]:
-    """
-    Splits a long string into chunks each containing up to max_words words.
-    """
-    words = text.split()
-    total_words = len(words)
-    print(f"[chunk_text] Splitting text of {total_words} words into chunks of up to {max_words} words each...")
-    chunks: List[str] = []
-    for i in range(0, total_words, max_words):
-        chunk = " ".join(words[i:i + max_words])
-        chunks.append(chunk)
-        print(f"[chunk_text] Created chunk {len(chunks)-1} with {len(chunk.split())} words")
-    print(f"[chunk_text] Finished creating {len(chunks)} chunks\n")
-    return chunks
+from retrieval.schemas import (
+    CharacterLore,
+    ChunkKind,
+    EntityType,
+    LocationLore,
+    LoreChunk,
+)
 
 
-def chunk_character_json_file(path: str, max_words: int = 300) -> List[Dict[str, Any]]:
-    """
-    Reads a JSON world-doc, extracts all relevant text fields,
-    and returns a list of chunk dicts with metadata.
-    """
-    print(f"[chunk_json_file] Processing file: {path}")
-    data = json.load(open(path, encoding='utf-8'))
-    pieces: List[str] = []
+def normalize_lines(lines: list[str | None]) -> list[str]:
+    return [line.strip() for line in lines if line and line.strip()]
 
-    # 1. Basic identifiers & flavor
-    print("[chunk_json_file] Extracting basic fields...")
-    for fld in ("name", "title", "race", "age"):
-        if data.get(fld):
-            pieces.append(str(data[fld]))
-            print(f"  - {fld}: {data.get(fld)}")
 
-    # 2. Free-form description
-    if data.get("description"):
-        pieces.append(data["description"])
-        print(f"  - description length: {len(data['description'].split())} words")
+def join_lines(lines: list[str | None]) -> str:
+    return "\n".join(normalize_lines(lines))
 
-    # 3. Background: lineage & notable events
-    lineage = data.get("background", {}).get("lineage", [])
-    if lineage:
-        pieces.extend(lineage)
-        print(f"  - lineage entries: {len(lineage)}")
-    events = data.get("background", {}).get("notable_events", [])
-    if events:
-        for evt in events:
-            evt_text = evt.get("event", "")
-            pieces.append(evt_text)
-        print(f"  - notable_events entries: {len(events)}")
 
-    # 4. Personality traits
-    traits = data.get("personality_traits", [])
-    if traits:
-        pieces.extend(traits)
-        print(f"  - personality_traits entries: {len(traits)}")
+def content_hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-    # 5. Relationships
-    rels = data.get("relationships", {})
-    if rels.get("allies"):
-        allies = ", ".join(rels["allies"])
-        pieces.append("Allies: " + allies)
-        print(f"  - allies: {allies}")
-    if rels.get("enemies"):
-        enemies = ", ".join(rels["enemies"])
-        pieces.append("Enemies: " + enemies)
-        print(f"  - enemies: {enemies}")
 
-    # 6. Location
-    if data.get("current_location"):
-        location = data["current_location"]
-        pieces.append("Location: " + location)
-        print(f"  - current_location: {location}")
+def make_chunk(
+    *,
+    entity_type: EntityType,
+    entity_id: str,
+    entity_name: str,
+    chunk_kind: ChunkKind,
+    text: str,
+    tags: list[str],
+    source_path: str,
+) -> LoreChunk:
+    return LoreChunk(
+        id=f"{entity_type}:{entity_id}:{chunk_kind}",
+        entity_type=entity_type,
+        entity_id=entity_id,
+        entity_name=entity_name,
+        chunk_kind=chunk_kind,
+        text=text,
+        tags=tags,
+        source_path=source_path,
+        content_hash=content_hash(text),
+    )
 
-    # 7. Inventory items
-    inventory = data.get("inventory", [])
-    if inventory:
-        print(f"  - inventory items: {len(inventory)}")
-        for item in inventory:
-            name = item.get("name", "")
-            desc = item.get("description", "")
-            pieces.append(f"{name}: {desc}")
-            print(f"    · {name}: {len(desc.split())} words")
 
-    # Join all pieces and split into word-based chunks
-    full_text = " ".join(pieces)
-    print(f"[chunk_json_file] Total concatenated text length: {len(full_text.split())} words")
-    text_chunks = chunk_text(full_text, max_words)
+def character_identity_text(character: CharacterLore) -> str:
+    aliases = ", ".join(character.aliases)
+    parts = [
+        f"Name: {character.name}",
+        f"Title: {character.title}" if character.title else None,
+        f"Aliases: {aliases}" if aliases else None,
+        f"Race: {character.race}" if character.race else None,
+        f"Age: {character.age}" if character.age is not None else None,
+        f"Current location: {character.current_location}"
+        if character.current_location
+        else None,
+        f"Tags: {', '.join(character.tags)}" if character.tags else None,
+    ]
+    return join_lines(parts)
 
-    # Build metadata-rich chunk dicts
-    chunk_dicts: List[Dict[str, Any]] = []
-    for idx, chunk in enumerate(text_chunks):
-        metadata = {
-            "id": data.get("id", ""),
-            "chunk_index": idx,
-            "page_content": chunk,
-            "type": data.get("type"),
-            "tags": data.get("tags", []),
-            "source_file": path
-        }
-        chunk_dicts.append(metadata)
-    print(f"[chunk_json_file] Generated {len(chunk_dicts)} metadata entries\n")
 
-    return chunk_dicts
+def character_history_text(character: CharacterLore) -> str:
+    lines: list[str | None] = []
+    if character.background.lineage:
+        lines.append("Lineage: " + "; ".join(character.background.lineage))
 
-def chunk_location_json_file(path: str, max_words: int = 300) -> List[Dict[str, Any]]:
-    """
-    Reads a JSON location-doc, extracts all relevant text fields,
-    and returns a list of chunk dicts with metadata.
-    """
-    print(f"[chunk_location_json_file] Processing location file: {path}")
-    data = json.load(open(path, encoding='utf-8'))
-    pieces: List[str] = []
+    for event in character.background.notable_events:
+        prefix = f"{event.year}: " if event.year is not None else ""
+        lines.append(prefix + event.event)
 
-    # Basic identifiers
-    print("[chunk_location_json_file] Extracting basic fields...")
-    for fld in ("name", "region", "type"):
-        if data.get(fld):
-            pieces.append(str(data.get(fld)))
-            print(f"  - {fld}: {data.get(fld)}")
+    return join_lines(lines)
 
-    # Description
-    if data.get("description"):
-        pieces.append(data["description"])
-        print(f"  - description length: {len(data['description'].split())} words")
 
-    # History: founding
-    founding = data.get("history", {}).get("founding", {})
+def character_relationship_text(character: CharacterLore) -> str:
+    relationships = character.relationships
+    return join_lines([
+        "Allies: " + ", ".join(relationships.allies)
+        if relationships.allies
+        else None,
+        "Enemies: " + ", ".join(relationships.enemies)
+        if relationships.enemies
+        else None,
+    ])
+
+
+def character_inventory_text(character: CharacterLore) -> str:
+    lines = [
+        f"{item.name}: {item.description}" if item.description else item.name
+        for item in character.inventory
+    ]
+    return join_lines(lines)
+
+
+def chunk_character(character: CharacterLore, source_path: str) -> list[LoreChunk]:
+    candidates: list[tuple[ChunkKind, str]] = [
+        ("identity", character_identity_text(character)),
+        ("description", character.description),
+        ("personality", join_lines(character.personality_traits)),
+        ("relationships", character_relationship_text(character)),
+        ("history", character_history_text(character)),
+        ("inventory", character_inventory_text(character)),
+    ]
+
+    return [
+        make_chunk(
+            entity_type="character",
+            entity_id=character.id,
+            entity_name=character.name,
+            chunk_kind=chunk_kind,
+            text=text,
+            tags=character.tags,
+            source_path=source_path,
+        )
+        for chunk_kind, text in candidates
+        if text.strip()
+    ]
+
+
+def location_overview_text(location: LocationLore) -> str:
+    founding = location.history.founding
+    founding_text = None
     if founding:
-        line = f"Founded in {founding.get('year')} by {founding.get('founder')} to {founding.get('purpose')}"
-        pieces.append(line)
-        print(f"  - founding: {line}")
-    # History: notable events
-    loc_events = data.get("history", {}).get("notable_events", [])
-    if loc_events:
-        for evt in loc_events:
-            text = evt.get("event", "")
-            pieces.append(text)
-        print(f"  - notable_events entries: {len(loc_events)}")
+        founding_bits = normalize_lines([
+            str(founding.year) if founding.year is not None else None,
+            founding.founder,
+            founding.purpose,
+        ])
+        founding_text = "Founded: " + " | ".join(founding_bits)
 
-    # Features
-    features = data.get("features", [])
-    if features:
-        print(f"  - features count: {len(features)}")
-        for feat in features:
-            name = feat.get("name", "")
-            desc = feat.get("description", "")
-            pieces.append(f"Feature {name}: {desc}")
-            print(f"    · {name}: {len(desc.split())} words")
+    history_events = [
+        f"{event.year}: {event.event}" if event.year is not None else event.event
+        for event in location.history.notable_events
+    ]
+    features = [
+        f"{feature.name}: {feature.description}"
+        if feature.description
+        else feature.name
+        for feature in location.features
+    ]
 
-    # Inhabitants
-    inhabitants = data.get("inhabitants", [])
-    if inhabitants:
-        print(f"  - inhabitants count: {len(inhabitants)}")
-        for npc in inhabitants:
-            role = npc.get("role", "")
-            notes = npc.get("notes", "")
-            pieces.append(f"{npc.get('npc_id')}, the {role}: {notes}")
-            print(f"    · {npc.get('npc_id')}: {role}")
+    return join_lines([
+        f"Name: {location.name}",
+        f"Region: {location.region}" if location.region else None,
+        f"Aliases: {', '.join(location.aliases)}" if location.aliases else None,
+        location.description,
+        founding_text,
+        "History: " + " ".join(history_events) if history_events else None,
+        "Features: " + " ".join(features) if features else None,
+        f"Tags: {', '.join(location.tags)}" if location.tags else None,
+    ])
 
-    # Connections
-    conns = data.get("connections", {})
-    adj = conns.get("adjacent_locations", [])
-    if adj:
-        line = "Adjacent: " + ", ".join(adj)
-        pieces.append(line)
-        print(f"  - adjacent_locations: {adj}")
-    secret = conns.get("secret_passages", [])
-    if secret:
-        for sp in secret:
-            method = sp.get("method", "")
-            to = sp.get("to", "")
-            line = f"Secret to {to}: {method}"
-            pieces.append(line)
-            print(f"  - secret_passage: {line}")
 
-    # Tags
-    tags = data.get("tags", [])
-    if tags:
-        line = "Tags: " + ", ".join(tags)
-        pieces.append(line)
-        print(f"  - tags: {tags}")
+def location_encounters_text(location: LocationLore) -> str:
+    inhabitants = [
+        f"{inhabitant.npc_id}"
+        f" ({inhabitant.role})"
+        f": {inhabitant.notes}"
+        for inhabitant in location.inhabitants
+    ]
+    return join_lines([
+        "Monsters: " + ", ".join(location.monsters)
+        if location.monsters
+        else None,
+        "Inhabitants: " + " ".join(inhabitants) if inhabitants else None,
+    ])
 
-    # Join and chunk
-    full_text = " ".join(pieces)
-    print(f"[chunk_location_json_file] Total text length: {len(full_text.split())} words")
-    text_chunks = chunk_text(full_text, max_words)
 
-    # Build metadata
-    chunk_dicts: List[Dict[str, Any]] = []
-    for idx, chunk in enumerate(text_chunks):
-        metadata = {
-            "id": data.get("id", ""),
-            "chunk_index": idx,
-            "page_content": chunk,
-            "type": data.get("type"),
-            "tags": data.get("tags", []),
-            "source_file": path
-        }
-        chunk_dicts.append(metadata)
-    print(f"[chunk_location_json_file] Generated {len(chunk_dicts)} location chunks\n")
-    return chunk_dicts
+def location_connections_text(location: LocationLore) -> str:
+    secret_passages = [
+        f"Secret passage to {passage.to}: {passage.method}"
+        for passage in location.connections.secret_passages
+    ]
+    return join_lines([
+        "Adjacent locations: "
+        + ", ".join(location.connections.adjacent_locations)
+        if location.connections.adjacent_locations
+        else None,
+        *secret_passages,
+    ])
+
+
+def location_completion_text(location: LocationLore) -> str:
+    return join_lines([
+        f"Objective: {location.completion.objective}"
+        if location.completion.objective
+        else None,
+        "Signals: " + "; ".join(location.completion.signals)
+        if location.completion.signals
+        else None,
+    ])
+
+
+def chunk_location(location: LocationLore, source_path: str) -> list[LoreChunk]:
+    candidates: list[tuple[ChunkKind, str]] = [
+        ("overview", location_overview_text(location)),
+        ("encounters", location_encounters_text(location)),
+        ("challenges", join_lines(location.challenges)),
+        ("connections", location_connections_text(location)),
+        ("clues", join_lines(location.clues)),
+        ("loot", join_lines(location.loot)),
+        ("completion", location_completion_text(location)),
+    ]
+
+    return [
+        make_chunk(
+            entity_type="location",
+            entity_id=location.id,
+            entity_name=location.name,
+            chunk_kind=chunk_kind,
+            text=text,
+            tags=location.tags,
+            source_path=source_path,
+        )
+        for chunk_kind, text in candidates
+        if text.strip()
+    ]
+
+
+def load_character(path: str | Path) -> CharacterLore:
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    return CharacterLore.model_validate(data)
+
+
+def load_location(path: str | Path) -> LocationLore:
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    return LocationLore.model_validate(data)
+
+
+def chunk_character_json_file(path: str | Path) -> list[LoreChunk]:
+    source_path = str(path)
+    return chunk_character(load_character(path), source_path)
+
+
+def chunk_location_json_file(path: str | Path) -> list[LoreChunk]:
+    source_path = str(path)
+    return chunk_location(load_location(path), source_path)
