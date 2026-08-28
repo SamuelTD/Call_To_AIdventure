@@ -212,3 +212,5 @@ training/
 
 *.pyc
 uv.lock
+
+certif/
