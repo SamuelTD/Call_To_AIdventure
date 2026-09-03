@@ -7,4 +7,5 @@ __pycache__
 .coverage
 htmlcov
 evaluation/report.json
-monster_scrapping
+monster_scrapping/*
+!monster_scrapping/monsters.json

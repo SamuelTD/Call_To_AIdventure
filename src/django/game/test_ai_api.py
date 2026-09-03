@@ -23,6 +23,18 @@ class RuntimeConfigTests(TestCase):
         metadata = AIRuntimeConfig.from_env().safe_metadata()
         self.assertNotIn("openai_api_key", metadata)
 
+    @patch.dict("os.environ", {"RAG_ENABLED": "false"})
+    def test_rag_can_be_disabled(self):
+        config = AIRuntimeConfig.from_env()
+
+        self.assertFalse(config.rag_enabled)
+        self.assertFalse(config.safe_metadata()["rag_enabled"])
+
+    @patch.dict("os.environ", {"RAG_ENABLED": "sometimes"})
+    def test_invalid_rag_enabled_is_rejected(self):
+        with self.assertRaises(AIConfigurationError):
+            AIRuntimeConfig.from_env()
+
 
 class AIAPIContractTests(TestCase):
     def setUp(self):

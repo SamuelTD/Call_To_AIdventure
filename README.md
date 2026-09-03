@@ -195,6 +195,8 @@ Optional LLM retry and timeout settings:
 
 Optional RAG settings:
 
+- `RAG_ENABLED`, default `true`; set to `false` to skip Ollama-backed RAG calls
+  and speed up gameplay when Ollama is not running
 - `OLLAMA_HOST`, default `http://localhost:11434`
 - `EMBED_MODEL`, default `mxbai-embed-large:latest`
 - `OLLAMA_KEY`, if your Ollama setup requires one

@@ -37,7 +37,7 @@ class AIHealthView(View):
         return JsonResponse({
             "status": "configured" if config.openai_api_key else "degraded",
             "generation_configured": bool(config.openai_api_key),
-            "retrieval_configured": True,
+            "retrieval_configured": config.rag_enabled,
         })
 
 

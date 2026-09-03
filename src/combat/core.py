@@ -1,70 +1,119 @@
-from utils.player import Player
-from utils.monster import get_monster
-from utils.enums import PlayerAction
 import random as r
+from contextvars import ContextVar
+from dataclasses import dataclass, field
+
+from utils.enums import PlayerAction
+from utils.monster import Monster, get_monster
+from utils.player import Player
 from utils.python_utils import clear
 
-current_monster = ""
-combat_log = []
-player = ""
-player_is_defending = False
 
-def restore_combat(param_player: Player, param_monster, param_combat_log=None):
-    global current_monster, combat_log, player, player_is_defending
+@dataclass
+class CombatSession:
+    player: Player
+    monster: Monster
+    log: list[str] = field(default_factory=list)
+    player_is_defending: bool = False
 
-    player = param_player
-    current_monster = param_monster
-    combat_log = list(param_combat_log or [])
-    player_is_defending = False
 
-def setup_combat(enemy: str, param_player: Player):
-    global current_monster, combat_log, player
-    
-    player = param_player
-    current_monster = get_monster(enemy)
-    if not current_monster:
-        combat_log = [f"{enemy} not found in database."]
-        return combat_log, None
-    combat_log = []
-    combat_log.append(f"You are facing {current_monster.name}!")
-    return combat_log, current_monster
+def setup_combat_session(enemy: str, param_player: Player) -> tuple[list[str], CombatSession | None]:
+    monster = get_monster(enemy)
+    if not monster:
+        return [f"{enemy} not found in database."], None
 
-def player_action(action: PlayerAction):
-    global player_is_defending
-    
-    player_is_defending = False
+    session = CombatSession(
+        player=param_player,
+        monster=monster,
+        log=[f"You are facing {monster.name}!"],
+    )
+    return session.log, session
+
+
+def restore_combat_session(
+    param_player: Player,
+    param_monster: Monster,
+    param_combat_log=None,
+) -> CombatSession:
+    return CombatSession(
+        player=param_player,
+        monster=param_monster,
+        log=list(param_combat_log or []),
+    )
+
+
+def resolve_player_action(session: CombatSession, action: PlayerAction) -> tuple[bool, list[str]]:
+    session.player_is_defending = False
     match action:
         case PlayerAction.ATTACK:
-            dmg = r.randint(player.weapon.min_dmg, player.weapon.max_dmg)+player.strength
-            current_monster.HP -= dmg
-            combat_log.append(f"You attack {current_monster.name} with your {player.weapon.name} and deal {dmg} damage points to them.")
+            dmg = r.randint(session.player.weapon.min_dmg, session.player.weapon.max_dmg) + session.player.strength
+            session.monster.HP -= dmg
+            session.log.append(
+                f"You attack {session.monster.name} with your {session.player.weapon.name} "
+                f"and deal {dmg} damage points to them."
+            )
         case PlayerAction.DEFEND:
-            player_is_defending = True
-            combat_log.append(f"You focus on defending yourself against {current_monster.name} attacks.")
-    
-    if current_monster.HP <= 0:
-        combat_log.append(f"You have defeated {current_monster.name}!")
-    return current_monster.HP <= 0, combat_log
+            session.player_is_defending = True
+            session.log.append(
+                f"You focus on defending yourself against {session.monster.name} attacks."
+            )
 
-def monster_attack():
-    dmg = r.randint(1, 6)+current_monster.strength
-    if player_is_defending:
-        dmg /= 2
-        dmg = int(dmg)
-        
+    if session.monster.HP <= 0:
+        session.log.append(f"You have defeated {session.monster.name}!")
+    return session.monster.HP <= 0, session.log
+
+
+def resolve_monster_attack(session: CombatSession) -> tuple[bool, list[str]]:
+    dmg = r.randint(1, 6) + session.monster.strength
+    if session.player_is_defending:
+        dmg = int(dmg / 2)
+
     if dmg < 0:
         dmg = 0
-        
-    player.hp -= dmg
-    combat_log.append(f"{current_monster.name} attacks you! You suffer {dmg} damage points.")
-    if player.hp<= 0:
-        combat_log.append("You have died!")
-    return player.hp <= 0, combat_log
+
+    session.player.hp -= dmg
+    session.log.append(f"{session.monster.name} attacks you! You suffer {dmg} damage points.")
+    if session.player.hp <= 0:
+        session.log.append("You have died!")
+    return session.player.hp <= 0, session.log
+
+_legacy_combat_session: ContextVar[CombatSession | None] = ContextVar(
+    "legacy_combat_session",
+    default=None,
+)
+
+def restore_combat(param_player: Player, param_monster, param_combat_log=None):
+    session = restore_combat_session(param_player, param_monster, param_combat_log)
+    _legacy_combat_session.set(session)
+
+def setup_combat(enemy: str, param_player: Player):
+    log, session = setup_combat_session(enemy, param_player)
+    if session is None:
+        _legacy_combat_session.set(None)
+        return log, None
+
+    _legacy_combat_session.set(session)
+    return log, session.monster
+
+def player_action(action: PlayerAction):
+    session = _legacy_combat_session.get()
+    if session is None:
+        raise RuntimeError("No active combat session")
+
+    won, log = resolve_player_action(session, action)
+    return won, log
+
+def monster_attack():
+    session = _legacy_combat_session.get()
+    if session is None:
+        raise RuntimeError("No active combat session")
+
+    return resolve_monster_attack(session)
 
 def get_current_combat_state():
+    session = _legacy_combat_session.get()
     return {
-        "player": player,
-        "monster": current_monster,
+        "player": session.player if session else None,
+        "monster": session.monster if session else None,
     }
 
 # def run_combat(enemy: str, player: Player):

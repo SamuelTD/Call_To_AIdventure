@@ -26,6 +26,9 @@ class Command(BaseCommand):
 
         if not options["connect"]:
             return
+        if not config.rag_enabled:
+            self.stdout.write("RAG is disabled; skipping Ollama connectivity check")
+            return
         try:
             response = requests.get(
                 f"{config.ollama_host}/api/tags",

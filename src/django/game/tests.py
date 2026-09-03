@@ -1,18 +1,22 @@
-from unittest.mock import patch
+from pathlib import Path
+from unittest.mock import Mock, patch
 
 from django.contrib.auth.models import User
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.core.cache import cache
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from django.urls import reverse
 
 from game.models import CharacterTemplate, SaveGame
 from game.services.game_engine import GameEngine
 from game.services.tools import ensure_goal_state, make_serializable_state
+from combat.core import CombatSession
 from agents.game_master_graph import (
     normalize_damage_amount,
     normalize_heal_amount,
     parse_thinker_action,
     retrieve_known_location_context,
+    retrieve_rag_context,
     step_generate_story,
     step_agent_think,
     step_evaluate_goals,
@@ -24,6 +28,7 @@ from agents.llm_resilience import TemporaryLLMServiceError
 from agents.tools import deal_damage_tool, heal_tool, tools
 from agents.prompts import build_regular_story_prompt, build_thinker_system_message
 from agents.prompts.chooser import CHOOSER_TEMPLATE_FR
+from retrieval.embedder import EmbeddingRequestError
 from retrieval.service import (
     clear_retrieval_cache,
     retrieve_location_context,
@@ -168,23 +173,26 @@ class CombatEngineTests(SimpleTestCase):
     def setUp(self):
         self.engine = GameEngine.__new__(GameEngine)
 
-    @patch("game.services.game_engine.setup_combat")
-    @patch("game.services.game_engine.restore_combat")
+    @patch("game.services.game_engine.setup_combat_session")
+    @patch("game.services.game_engine.restore_combat_session")
     def test_start_combat_is_idempotent_when_monster_is_in_session_state(
         self,
-        restore_combat,
-        setup_combat,
+        restore_combat_session,
+        setup_combat_session,
     ):
+        player = make_player()
+        monster = make_monster()
         state = {
-            "player": make_player(),
+            "player": player,
             "current_monster_name": "Kobold Warrior",
-            "current_monster": make_monster(),
+            "current_monster": monster,
         }
+        restore_combat_session.return_value = CombatSession(player, monster)
 
         result = self.engine.start_combat(state)
 
-        setup_combat.assert_not_called()
-        restore_combat.assert_called_once_with(state["player"], state["current_monster"])
+        setup_combat_session.assert_not_called()
+        restore_combat_session.assert_called_once_with(player, monster)
         self.assertEqual(result["mode"], "combat")
         self.assertEqual(result["combat_log"], "Combat already underway.")
         self.assertEqual(result["monster_hp"], 8)
@@ -202,36 +210,32 @@ class CombatEngineTests(SimpleTestCase):
         self.assertEqual(result["choices"], ["Inspect rings", "Light torch", "Listen"])
         self.assertEqual(state["current_story"], "The sealed gate waits in the ash.")
 
-    @patch("game.services.game_engine.get_current_combat_state")
-    @patch("game.services.game_engine.monster_attack")
-    @patch("game.services.game_engine.player_action")
-    @patch("game.services.game_engine.restore_combat")
+    @patch("game.services.game_engine.resolve_monster_attack")
+    @patch("game.services.game_engine.resolve_player_action")
+    @patch("game.services.game_engine.restore_combat_session")
     def test_combat_action_restores_session_state_before_resolving_action(
         self,
-        restore_combat,
-        player_action,
-        monster_attack,
-        get_current_combat_state,
+        restore_combat_session,
+        resolve_player_action,
+        resolve_monster_attack,
     ):
         player = make_player()
         monster = make_monster()
+        combat_session = CombatSession(player, monster)
         state = {
             "player": player,
             "current_monster_name": "Kobold Warrior",
             "current_monster": monster,
         }
-        player_action.return_value = (False, ["You attack."])
-        monster_attack.return_value = (False, ["The monster attacks."])
-        get_current_combat_state.return_value = {
-            "player": player,
-            "monster": monster,
-        }
+        restore_combat_session.return_value = combat_session
+        resolve_player_action.return_value = (False, ["You attack."])
+        resolve_monster_attack.return_value = (False, ["The monster attacks."])
 
         result = self.engine.combat_action(state, PlayerAction.ATTACK.value)
 
-        restore_combat.assert_called_once_with(player, monster)
-        player_action.assert_called_once_with(PlayerAction.ATTACK)
-        monster_attack.assert_called_once()
+        restore_combat_session.assert_called_once_with(player, monster)
+        resolve_player_action.assert_called_once_with(combat_session, PlayerAction.ATTACK)
+        resolve_monster_attack.assert_called_once_with(combat_session)
         self.assertEqual(result["mode"], "combat")
 
     def test_combat_action_rejects_missing_or_invalid_combat(self):
@@ -252,6 +256,30 @@ class CombatEngineTests(SimpleTestCase):
         self.assertEqual(missing_combat["error"], "No active combat")
         self.assertEqual(invalid_action["mode"], "error")
         self.assertEqual(invalid_action["error"], "Invalid combat action")
+
+    @patch("combat.core.r.randint")
+    def test_combat_actions_are_isolated_between_session_states(self, randint):
+        randint.side_effect = [3, 4, 5]
+        first_state = {
+            "player": make_player(),
+            "current_monster_name": "Kobold Warrior",
+            "current_monster": make_monster(),
+        }
+        second_state = {
+            "player": make_player(),
+            "current_monster_name": "Kobold Warrior",
+            "current_monster": make_monster(),
+        }
+
+        first_result = self.engine.combat_action(first_state, PlayerAction.ATTACK.value)
+        second_result = self.engine.combat_action(second_state, PlayerAction.DEFEND.value)
+
+        self.assertEqual(first_result["mode"], "combat")
+        self.assertEqual(second_result["mode"], "combat")
+        self.assertEqual(first_state["current_monster"].HP, 5)
+        self.assertEqual(second_state["current_monster"].HP, 8)
+        self.assertEqual(first_state["player"].hp, 15)
+        self.assertEqual(second_state["player"].hp, 17)
 
 
 class RetrievalSpeedTests(SimpleTestCase):
@@ -312,6 +340,33 @@ class RetrievalSpeedTests(SimpleTestCase):
 
         self.assertEqual(context, "No relevant world lore was retrieved.")
 
+    @patch.dict("os.environ", {"RAG_ENABLED": "false"})
+    @patch("agents.game_master_graph.retrieve_lore_context")
+    def test_graph_skips_semantic_rag_when_disabled(self, retrieve_lore_context_mock):
+        state = make_game_state()
+        state["adventure"].locations.available = ["tomb_dragonkin_sealed_gate"]
+
+        context = retrieve_rag_context(state, "Describe the sealed gate.")
+
+        self.assertEqual(context, "No relevant world lore was retrieved.")
+        retrieve_lore_context_mock.assert_not_called()
+
+    @patch.dict("os.environ", {"RAG_ENABLED": "true"})
+    @patch("agents.game_master_graph.retrieve_lore_context")
+    def test_graph_embedding_failures_log_without_traceback(self, retrieve_lore_context_mock):
+        retrieve_lore_context_mock.side_effect = EmbeddingRequestError(
+            "Embedding request failed after 3 attempts against http://localhost:11434/v1/embeddings"
+        )
+        state = make_game_state()
+        state["adventure"].locations.available = ["tomb_dragonkin_sealed_gate"]
+
+        with self.assertLogs("agents.game_master_graph", level="WARNING") as logs:
+            context = retrieve_rag_context(state, "Describe the sealed gate.")
+
+        self.assertEqual(context, "No relevant world lore was retrieved.")
+        self.assertIn("RAG retrieval skipped", logs.output[0])
+        self.assertIsNone(logs.records[0].exc_info)
+
 
 class AccountFlowTests(TestCase):
     def test_login_page_renders(self):
@@ -347,6 +402,234 @@ class AccountFlowTests(TestCase):
 
         self.assertRedirects(response, reverse("landing"))
         self.assertNotContains(response, "loaded_player")
+
+
+class SecurityBoundaryTests(TestCase):
+    def tearDown(self):
+        cache.clear()
+
+    def test_json_post_requires_csrf_token_when_checks_are_enforced(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        response = csrf_client.post(
+            reverse("api_play"),
+            {"input": "hello"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_template_csrf_token_allows_json_post(self):
+        csrf_client = Client(enforce_csrf_checks=True)
+        page = csrf_client.get(reverse("landing"))
+        token = page.cookies["csrftoken"].value
+
+        response = csrf_client.post(
+            reverse("api_play"),
+            {"input": "hello"},
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=token,
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+    @override_settings(MAX_JSON_BODY_BYTES=16)
+    def test_json_body_size_is_limited(self):
+        response = self.client.post(
+            reverse("api_play"),
+            {"input": "x" * 100},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 413)
+
+    @override_settings(AI_RATE_LIMIT_REQUESTS=1, AI_RATE_LIMIT_WINDOW_SECONDS=60)
+    @patch("game.views.get_engine")
+    def test_ai_step_endpoint_is_rate_limited_per_session(self, get_engine):
+        state = make_game_state()
+        get_engine.return_value.step.return_value = {
+            "state": state,
+            "mode": "story",
+            "story": "The road continues.",
+            "choices": ["Keep walking."],
+        }
+        session = self.client.session
+        session["game_state"] = make_serializable_state(state)
+        session.save()
+
+        first_response = self.client.post(
+            reverse("api_step"),
+            {"choice": "Walk onward."},
+            content_type="application/json",
+        )
+        second_response = self.client.post(
+            reverse("api_step"),
+            {"choice": "Walk onward."},
+            content_type="application/json",
+        )
+
+        self.assertNotEqual(first_response.status_code, 429)
+        self.assertEqual(second_response.status_code, 429)
+
+
+class ProductQualityTemplateTests(TestCase):
+    template_dir = Path(__file__).resolve().parent / "templates" / "game"
+
+    def read_template(self, name):
+        return (self.template_dir / name).read_text(encoding="utf-8")
+
+    def test_dynamic_pages_expose_live_status_regions(self):
+        for template_name in ["landing.html", "character_create.html", "play.html", "combat.html"]:
+            with self.subTest(template=template_name):
+                template = self.read_template(template_name)
+                self.assertIn('role="status"', template)
+                self.assertIn('aria-live="polite"', template)
+                self.assertIn('aria-atomic="true"', template)
+
+    def test_custom_tabs_have_required_aria_and_keyboard_handlers(self):
+        for template_name in ["landing.html", "character_create.html"]:
+            with self.subTest(template=template_name):
+                template = self.read_template(template_name)
+                self.assertIn('role="tablist"', template)
+                self.assertIn('role="tab"', template)
+                self.assertIn('aria-selected="true"', template)
+                self.assertIn('aria-controls=', template)
+                self.assertIn('role="tabpanel"', template)
+                self.assertIn("handleTabKeydown", template)
+                self.assertIn("ArrowRight", template)
+                self.assertIn("Home", template)
+                self.assertIn("End", template)
+
+    def test_story_and_combat_updates_are_focusable_and_announced(self):
+        play_template = self.read_template("play.html")
+        combat_template = self.read_template("combat.html")
+
+        self.assertIn('id="story-box"', play_template)
+        self.assertIn('tabindex="-1"', play_template)
+        self.assertIn("storyBox.focus", play_template)
+        self.assertIn('id="combat-log"', combat_template)
+        self.assertIn('role="progressbar"', combat_template)
+        self.assertIn("combatLog.focus", combat_template)
+
+    def test_main_pages_render_accessibility_landmarks(self):
+        user = User.objects.create_user(
+            username="a11y_runner",
+            password="LongEnoughPassword42",
+        )
+        self.client.force_login(user)
+
+        landing = self.client.get(reverse("landing"))
+        character = self.client.get(f"{reverse('character_create')}?adventure_id=emerald_sword")
+        play = self.client.get(reverse("play"))
+        combat = self.client.get(reverse("combat"))
+
+        self.assertContains(landing, 'role="tablist"')
+        self.assertContains(landing, 'role="status"')
+        self.assertContains(character, 'role="tablist"')
+        self.assertContains(character, 'role="status"')
+        self.assertContains(play, 'aria-live="polite"')
+        self.assertContains(combat, 'role="progressbar"')
+
+
+class BrowserSmokeJourneyTests(TestCase):
+    @patch("game.views.get_engine")
+    def test_guest_can_start_play_enter_combat_and_resolve_action_with_fake_ai(self, get_engine):
+        engine = Mock()
+
+        def initialize(state):
+            state["current_choices"] = ["Enter the tomb."]
+            return state
+
+        def step(state, choice):
+            state["current_monster_name"] = "Kobold Warrior"
+            state["combat_fluff"] = "A small warrior blocks the path."
+            return {
+                "state": state,
+                "mode": "combat",
+                "combat_fluff": state["combat_fluff"],
+            }
+
+        engine.initialize.side_effect = initialize
+        engine.step.side_effect = step
+        engine.start_combat.return_value = {
+            "state": {
+                **make_game_state(),
+                "current_monster_name": "Kobold Warrior",
+                "current_monster": make_monster(),
+            },
+            "mode": "combat",
+            "combat_log": "You are facing Kobold Warrior!",
+            "monster_name": "Kobold Warrior",
+            "player_hp": 20,
+            "player_max_hp": 20,
+            "monster_hp": 8,
+            "monster_max_hp": 8,
+            "choices": [PlayerAction.ATTACK.value, PlayerAction.DEFEND.value],
+        }
+        combat_state = {
+            **make_game_state(),
+            "current_monster_name": "Kobold Warrior",
+            "current_monster": make_monster(hp=5),
+        }
+        engine.combat_action.return_value = {
+            "state": combat_state,
+            "mode": "combat",
+            "combat_log": "You attack. The monster attacks.",
+            "monster_name": "Kobold Warrior",
+            "player_hp": 16,
+            "player_max_hp": 20,
+            "monster_hp": 5,
+            "monster_max_hp": 8,
+            "choices": [PlayerAction.ATTACK.value, PlayerAction.DEFEND.value],
+        }
+        get_engine.return_value = engine
+
+        landing = self.client.get(reverse("landing"))
+        self.assertEqual(landing.status_code, 200)
+        self.assertContains(landing, 'meta name="csrf-token"')
+
+        character_page = self.client.get(f"{reverse('character_create')}?adventure_id=emerald_sword")
+        self.assertEqual(character_page.status_code, 200)
+        self.assertContains(character_page, 'role="tablist"')
+
+        start_response = self.client.post(
+            reverse("api_start"),
+            {
+                "adventure_id": "emerald_sword",
+                "character": make_character_payload(),
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(start_response.status_code, 200)
+        self.assertEqual(start_response.json()["choices"], ["Enter the tomb."])
+
+        play_page = self.client.get(reverse("play"))
+        self.assertEqual(play_page.status_code, 200)
+        self.assertContains(play_page, 'id="story-box"')
+
+        step_response = self.client.post(
+            reverse("api_step"),
+            {"choice": "Enter the tomb."},
+            content_type="application/json",
+        )
+        self.assertEqual(step_response.status_code, 200)
+        self.assertEqual(step_response.json()["mode"], "combat")
+
+        combat_page = self.client.get(reverse("combat"))
+        self.assertEqual(combat_page.status_code, 200)
+        self.assertContains(combat_page, 'role="progressbar"')
+
+        combat_start = self.client.post(reverse("api_combat_start"))
+        self.assertEqual(combat_start.status_code, 200)
+        self.assertEqual(combat_start.json()["monster_name"], "Kobold Warrior")
+
+        combat_action = self.client.post(
+            reverse("api_combat_action"),
+            {"action": PlayerAction.ATTACK.value},
+            content_type="application/json",
+        )
+        self.assertEqual(combat_action.status_code, 200)
+        self.assertEqual(combat_action.json()["mode"], "combat")
 
 
 @override_settings(DEBUG=True)

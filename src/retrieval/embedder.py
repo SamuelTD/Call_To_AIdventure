@@ -13,6 +13,11 @@ EMBED_MODEL = AI_CONFIG.embedding_model
 
 ollama_embeddings = OllamaEmbeddings(model=EMBED_MODEL)
 
+
+class EmbeddingRequestError(RuntimeError):
+    """Raised when the configured embedding provider cannot return an embedding."""
+
+
 def embed(text: str) -> List[float]:
     """
     Send text to Ollama with bounded retries and no content logging.
@@ -29,11 +34,16 @@ def embed(text: str) -> List[float]:
             resp = requests.post(url, json=payload, timeout=AI_CONFIG.embedding_timeout_seconds)
             resp.raise_for_status()
             break
-        except requests.RequestException:
+        except requests.RequestException as exc:
             if attempt >= AI_CONFIG.embedding_max_attempts:
                 RAG_EMBEDDING_REQUESTS.labels(status="error").inc()
-                logger.exception("Embedding request failed after %s attempts", attempt)
-                raise
+                message = (
+                    f"Embedding request failed after {attempt} attempts "
+                    f"against {url}: {exc}"
+                )
+                logger.warning(message)
+                logger.debug("Embedding request traceback", exc_info=True)
+                raise EmbeddingRequestError(message) from exc
             time.sleep(min(0.25 * (2 ** (attempt - 1)), 2.0))
     RAG_EMBEDDING_DURATION.observe(time.perf_counter() - started)
 

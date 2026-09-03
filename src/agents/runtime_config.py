@@ -41,11 +41,21 @@ def _http_url(name: str, default: str) -> str:
     return value
 
 
+def _bool_env(name: str, default: str) -> bool:
+    value = os.getenv(name, default).strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    raise AIConfigurationError(f"{name} must be a boolean")
+
+
 @dataclass(frozen=True)
 class AIRuntimeConfig:
     openai_api_key: str | None
     openai_model: str
     reasoning_effort: str
+    rag_enabled: bool
     ollama_host: str
     embedding_model: str
     request_timeout_seconds: float
@@ -70,6 +80,7 @@ class AIRuntimeConfig:
             openai_api_key=key,
             openai_model=model,
             reasoning_effort=os.getenv("OPENAI_REASONING_EFFORT", "low").strip() or "low",
+            rag_enabled=_bool_env("RAG_ENABLED", "true"),
             ollama_host=_http_url("OLLAMA_HOST", "http://localhost:11434"),
             embedding_model=embedding_model,
             request_timeout_seconds=_positive_float("LLM_REQUEST_TIMEOUT_SECONDS", "30"),
@@ -84,6 +95,7 @@ class AIRuntimeConfig:
         return {
             "generation_model": self.openai_model,
             "reasoning_effort": self.reasoning_effort,
+            "rag_enabled": self.rag_enabled,
             "embedding_model": self.embedding_model,
             "request_timeout_seconds": self.request_timeout_seconds,
             "provider_max_retries": self.provider_max_retries,

@@ -3,6 +3,7 @@
 <html lang="{{ LANGUAGE_CODE }}">
 <head>
     <meta charset="UTF-8">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>Call to AIdventure — {% ui "Debug Page" %}</title>
     <style>
         body {
@@ -84,13 +85,21 @@
 
     <script>
         const output = document.getElementById("output");
+        const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').content;
+
+        function csrfHeaders(headers = {}) {
+            return {
+                ...headers,
+                "X-CSRFToken": CSRF_TOKEN
+            };
+        }
 
         async function postJson(url, payload) {
             const response = await fetch(url, {
                 method: "POST",
-                headers: {
+                headers: csrfHeaders({
                     "Content-Type": "application/json"
-                },
+                }),
                 body: JSON.stringify(payload)
             });
 
@@ -110,7 +119,8 @@
 
         async function startCombat() {
             const response = await fetch("/api/combat/start", {
-                method: "POST"
+                method: "POST",
+                headers: csrfHeaders()
             })
 
             const data = await response.json()
@@ -123,7 +133,7 @@
 
             const response = await fetch("/api/combat/action", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: csrfHeaders({ "Content-Type": "application/json" }),
                 body: JSON.stringify({ action })
             })
 

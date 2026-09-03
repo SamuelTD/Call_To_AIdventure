@@ -155,6 +155,11 @@ LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
 
 
+def env_bool(name, default):
+    value = os.getenv(name, default)
+    return str(value).lower() in {"1", "true", "yes", "on"}
+
+
 def env_int(name, default):
     return int(os.getenv(name, default))
 
@@ -190,6 +195,24 @@ LLM_SERVICE_UNAVAILABLE_MESSAGE = os.getenv(
     "LLM_SERVICE_UNAVAILABLE_MESSAGE",
     "The storyteller is temporarily unavailable. Your adventure is safe; please try again in a moment.",
 )
+MAX_JSON_BODY_BYTES = env_int("MAX_JSON_BODY_BYTES", "8192")
+AI_RATE_LIMIT_REQUESTS = env_int("AI_RATE_LIMIT_REQUESTS", "12")
+AI_RATE_LIMIT_WINDOW_SECONDS = env_int("AI_RATE_LIMIT_WINDOW_SECONDS", "300")
+
+if not DEBUG and not os.getenv("DJANGO_ALLOWED_HOSTS"):
+    raise RuntimeError("DJANGO_ALLOWED_HOSTS is required when DJANGO_DEBUG is false")
+
+SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", "false" if DEBUG else "true")
+SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", "false" if DEBUG else "true")
+CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE", "false" if DEBUG else "true")
+SECURE_HSTS_SECONDS = env_int("DJANGO_SECURE_HSTS_SECONDS", "0" if DEBUG else "31536000")
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
+    "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS",
+    "false" if DEBUG else "true",
+)
+SECURE_HSTS_PRELOAD = env_bool("DJANGO_SECURE_HSTS_PRELOAD", "false" if DEBUG else "true")
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+CSRF_TRUSTED_ORIGINS = env_csv("DJANGO_CSRF_TRUSTED_ORIGINS", "")
 
 LOGGING = {
     "version": 1,

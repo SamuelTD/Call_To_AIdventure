@@ -1,11 +1,10 @@
 from langgraph.graph import StateGraph
 import random
 from combat.core import (
-    setup_combat,
-    restore_combat,
-    player_action,
-    monster_attack,
-    get_current_combat_state,
+    restore_combat_session,
+    resolve_monster_attack,
+    resolve_player_action,
+    setup_combat_session,
 )
 from utils.enums import PlayerAction
 from agents.game_master_graph import (
@@ -103,31 +102,26 @@ class GameEngine:
             }
 
         if state.get("current_monster") is not None:
-            restore_combat(state["player"], state["current_monster"])
+            session = restore_combat_session(state["player"], state["current_monster"])
             payload = self._build_combat_payload(state)
-            payload["combat_log"] = payload["combat_log"] or "Combat already underway."
+            payload["combat_log"] = "\n".join(session.log) or "Combat already underway."
             return {
                 "state": state,
                 "mode": "combat",
                 **payload,
             }
 
-        combat_log, state["current_monster"] = setup_combat(
+        combat_log, combat_session = setup_combat_session(
             state["current_monster_name"],
             state["player"]
         )
+        state["current_monster"] = combat_session.monster if combat_session else None
         if state["current_monster"] is None:
             return {
                 "state": state,
                 "mode": "error",
                 "error": "Monster not found",
             }
-
-        combat_state = get_current_combat_state()
-        if combat_state.get("player") is not None:
-            state["player"] = combat_state["player"]
-        if combat_state.get("monster") is not None:
-            state["current_monster"] = combat_state["monster"]
         
         payload = self._build_combat_payload(state, combat_log)
 
@@ -145,7 +139,6 @@ class GameEngine:
                 "error": "No active combat",
             }
 
-        restore_combat(state["player"], state["current_monster"])
         try:
             action = PlayerAction(combat_action_value)
         except ValueError:
@@ -155,17 +148,15 @@ class GameEngine:
                 "error": "Invalid combat action",
             }
 
-        player_has_won, combat_log = player_action(action)
+        combat_session = restore_combat_session(state["player"], state["current_monster"])
+        player_has_won, combat_log = resolve_player_action(combat_session, action)
         player_has_died = False
 
         if not player_has_won:
-            player_has_died, combat_log = monster_attack()
+            player_has_died, combat_log = resolve_monster_attack(combat_session)
 
-        combat_state = get_current_combat_state()
-        if combat_state.get("player") is not None:
-            state["player"] = combat_state["player"]
-        if combat_state.get("monster") is not None:
-            state["current_monster"] = combat_state["monster"]
+        state["player"] = combat_session.player
+        state["current_monster"] = combat_session.monster
         
         if not player_has_died and not player_has_won:
             payload = self._build_combat_payload(state, combat_log)

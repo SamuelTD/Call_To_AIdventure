@@ -38,7 +38,9 @@ from agents.llm_runtime import (
     choicer_chain_fr,
     build_thinker_agent,
 )
+from agents.runtime_config import AIRuntimeConfig
 from agents.llm_resilience import invoke_llm_with_retries
+from retrieval.embedder import EmbeddingRequestError
 from retrieval.schemas import EntityType, RagContext
 from retrieval.service import (
     build_retrieval_scope,
@@ -166,6 +168,10 @@ def retrieve_rag_context(
     entity_types: list[EntityType] | None = None,
     top_k: int = 5,
 ) -> str:
+    if not AIRuntimeConfig.from_env().rag_enabled:
+        logger.debug("RAG retrieval skipped because RAG_ENABLED is false")
+        return empty_rag_context()
+
     if not state.get("adventure"):
         return empty_rag_context()
 
@@ -181,6 +187,10 @@ def retrieve_rag_context(
             top_k=top_k,
         )
         return context.format_for_prompt()
+    except EmbeddingRequestError as exc:
+        logger.warning("RAG retrieval skipped; %s", exc)
+        logger.debug("RAG retrieval traceback", exc_info=True)
+        return empty_rag_context()
     except Exception:
         logger.exception("RAG retrieval failed; continuing with empty context")
         return empty_rag_context()
