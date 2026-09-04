@@ -1,4 +1,5 @@
 from functools import lru_cache
+import time
 from typing import Any
 
 from retrieval.client import query_lore_collection
@@ -14,6 +15,7 @@ from retrieval.schemas import (
 )
 from utils.adventure import Adventure
 from utils.pathing import project_path
+from observability.metrics import RAG_REQUESTS, RAG_REQUEST_DURATION
 
 
 def build_retrieval_scope(
@@ -130,15 +132,24 @@ def retrieve_lore_context(
     if not has_retrievable_scope(scope, entity_types):
         return RagContext()
 
-    return _retrieve_lore_context_cached(
-        query.strip(),
-        tuple(scope.active_character_ids),
-        tuple(scope.referenceable_character_ids),
-        tuple(scope.available_location_ids),
-        scope.current_location_id,
-        tuple(entity_types or ()),
-        top_k,
-    )
+    started = time.perf_counter()
+    try:
+        context = _retrieve_lore_context_cached(
+            query.strip(),
+            tuple(scope.active_character_ids),
+            tuple(scope.referenceable_character_ids),
+            tuple(scope.available_location_ids),
+            scope.current_location_id,
+            tuple(entity_types or ()),
+            top_k,
+        )
+        RAG_REQUESTS.labels(status="hit" if context.chunks else "empty").inc()
+        return context
+    except Exception:
+        RAG_REQUESTS.labels(status="error").inc()
+        raise
+    finally:
+        RAG_REQUEST_DURATION.observe(time.perf_counter() - started)
 
 
 @lru_cache(maxsize=256)

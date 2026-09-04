@@ -1,0 +1,57 @@
+openapi: 3.1.0
+info:
+  title: Call to AIdventure AI API
+  version: 1.0.0
+  description: Authenticated, session-based API for reproducible AI-backed game turns.
+paths:
+  /api/v1/ai/health/:
+    get:
+      summary: Report safe AI configuration readiness
+      responses:
+        '200': {description: Configuration status}
+        '503': {description: Invalid configuration}
+  /api/v1/ai/configuration/:
+    get:
+      summary: Return non-secret model and timeout metadata
+      security: [{cookieSession: []}]
+      responses:
+        '200': {description: Safe runtime metadata}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+  /api/v1/games/{game_id}/turns/:
+    post:
+      summary: Advance an owned saved game by one server-approved choice
+      security: [{cookieSession: []}, {csrfToken: []}]
+      parameters:
+        - in: path
+          name: game_id
+          required: true
+          schema: {type: integer, minimum: 1}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [choice]
+              properties:
+                choice: {type: string, minLength: 1, maxLength: 1000}
+            example: {choice: "Open the sealed gate."}
+      responses:
+        '200': {description: Story, combat, victory, or defeat result}
+        '400': {description: Invalid JSON or missing choice}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {description: Missing or invalid CSRF token}
+        '404': {description: Owned game not found}
+        '409': {description: Game already finished}
+        '413': {description: Payload exceeds the configured limit}
+        '422': {description: Choice is not in the current server state}
+        '429': {description: Per-user hourly quota exceeded}
+        '503': {description: Generation provider unavailable; state not advanced}
+components:
+  securitySchemes:
+    cookieSession: {type: apiKey, in: cookie, name: sessionid}
+    csrfToken: {type: apiKey, in: header, name: X-CSRFToken}
+  responses:
+    Unauthorized:
+      description: Authentication required

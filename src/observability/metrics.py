@@ -70,3 +70,45 @@ LLM_REQUEST_DURATION = Histogram(
     ["operation"],
     buckets=(0.25, 0.5, 1, 2, 5, 10, 20, 30, 60),
 )
+
+LLM_STRUCTURED_OUTPUTS = Counter(
+    "aidventure_llm_structured_outputs_total",
+    "Structured LLM output validation outcomes",
+    ["operation", "status"],
+)
+
+LLM_TOKEN_USAGE = Counter(
+    "aidventure_llm_tokens_total",
+    "Provider-reported token usage where available",
+    ["direction", "model"],
+)
+
+LLM_ESTIMATED_COST_USD = Counter(
+    "aidventure_llm_estimated_cost_usd_total",
+    "Estimated provider cost from reported tokens and configured rates",
+    ["model"],
+)
+
+RAG_REQUESTS = Counter(
+    "aidventure_rag_requests_total",
+    "RAG retrieval outcomes",
+    ["status"],
+)
+
+RAG_REQUEST_DURATION = Histogram(
+    "aidventure_rag_request_duration_seconds",
+    "RAG query duration including embedding and vector lookup",
+    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10),
+)
+
+RAG_EMBEDDING_REQUESTS = Counter(
+    "aidventure_rag_embedding_requests_total",
+    "Embedding request outcomes",
+    ["status"],
+)
+
+RAG_EMBEDDING_DURATION = Histogram(
+    "aidventure_rag_embedding_duration_seconds",
+    "Embedding provider request duration",
+    buckets=(0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10),
+)

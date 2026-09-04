@@ -1,0 +1,32 @@
+groups:
+  - name: aidventure-ai
+    rules:
+      - alert: AIdventureAIServiceUnavailable
+        expr: increase(aidventure_llm_requests_total{status="unavailable"}[10m]) > 2
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: AI generation is repeatedly unavailable
+      - alert: AIdventureAIHighLatency
+        expr: histogram_quantile(0.95, sum by (le) (rate(aidventure_llm_request_duration_seconds_bucket[15m]))) > 30
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: AI generation p95 exceeds 30 seconds
+      - alert: AIdventureStructuredOutputFailures
+        expr: increase(aidventure_llm_structured_outputs_total{status="invalid"}[15m]) > 0
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: Structured model output failed validation
+      - alert: AIdventureRAGErrors
+        expr: increase(aidventure_rag_requests_total{status="error"}[15m]) > 2
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: RAG retrieval is repeatedly failing
+      - alert: AIdventureTestAlert
+        expr: vector(0)
+        labels: {severity: info}
+        annotations:
+          summary: Safe disabled rule; change vector(0) to vector(1) for a demonstration

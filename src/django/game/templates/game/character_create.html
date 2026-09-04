@@ -3,6 +3,7 @@
 <html lang="{{ LANGUAGE_CODE }}">
 <head>
     <meta charset="UTF-8">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>{% ui "Create Character" %} - Call To AIdventure</title>
     <style>
         body {
@@ -246,11 +247,11 @@
 
             {% if adventure %}
                 <div class="creator-tabs" role="tablist" aria-label="{% ui 'Character creation' %}">
-                    <button id="new-character-tab" class="tab-btn active" type="button">{% ui "New Character" %}</button>
-                    <button id="templates-tab" class="tab-btn" type="button">{% ui "Character Templates" %}</button>
+                    <button id="new-character-tab" class="tab-btn active" type="button" role="tab" aria-selected="true" aria-controls="new-character-panel">{% ui "New Character" %}</button>
+                    <button id="templates-tab" class="tab-btn" type="button" role="tab" aria-selected="false" aria-controls="templates-panel" tabindex="-1">{% ui "Character Templates" %}</button>
                 </div>
 
-                <div id="new-character-panel" class="tab-panel">
+                <div id="new-character-panel" class="tab-panel" role="tabpanel" aria-labelledby="new-character-tab">
                     <form id="character-form">
                         <label for="character-name">{% ui "Name" %}</label>
                         <input id="character-name" name="name" type="text" maxlength="60" placeholder="Stan" autocomplete="off" required>
@@ -282,13 +283,13 @@
                     </form>
                 </div>
 
-                <div id="templates-panel" class="tab-panel hidden">
+                <div id="templates-panel" class="tab-panel hidden" role="tabpanel" aria-labelledby="templates-tab">
                     <div id="template-list" class="template-list"></div>
-                    <div id="empty-templates" class="empty-templates hidden">{% ui "No character templates available." %}</div>
+                    <div id="empty-templates" class="empty-templates hidden" aria-live="polite">{% ui "No character templates available." %}</div>
                 </div>
             {% endif %}
 
-            <div id="status" class="status"></div>
+            <div id="status" class="status" role="status" aria-live="polite" aria-atomic="true" tabindex="-1"></div>
         </div>
     </div>
 
@@ -309,6 +310,17 @@
         const API_SAVE_TEMPLATE_URL = "{% url 'api_character_template_save' %}";
         const ADVENTURE_ID = "{{ adventure_id|escapejs }}";
         const CAN_SAVE_TEMPLATES = {{ user.is_authenticated|yesno:"true,false" }};
+        const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').content;
+
+        function csrfFetch(url, options = {}) {
+            return fetch(url, {
+                ...options,
+                headers: {
+                    ...(options.headers || {}),
+                    "X-CSRFToken": CSRF_TOKEN
+                }
+            });
+        }
 
         const characterForm = document.getElementById("character-form");
         const characterName = document.getElementById("character-name");
@@ -351,10 +363,30 @@
             const showTemplates = tabName === "templates";
             newCharacterTab.classList.toggle("active", !showTemplates);
             templatesTab.classList.toggle("active", showTemplates);
+            newCharacterTab.setAttribute("aria-selected", String(!showTemplates));
+            templatesTab.setAttribute("aria-selected", String(showTemplates));
+            newCharacterTab.tabIndex = showTemplates ? -1 : 0;
+            templatesTab.tabIndex = showTemplates ? 0 : -1;
             newCharacterPanel.classList.toggle("hidden", showTemplates);
             templatesPanel.classList.toggle("hidden", !showTemplates);
             statusBox.textContent = "";
             statusBox.classList.remove("error");
+        }
+
+        function handleTabKeydown(event) {
+            const tabs = [newCharacterTab, templatesTab].filter(Boolean);
+            const currentIndex = tabs.indexOf(event.currentTarget);
+            if (currentIndex < 0 || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+
+            event.preventDefault();
+            let nextIndex = currentIndex;
+            if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % tabs.length;
+            if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+            if (event.key === "Home") nextIndex = 0;
+            if (event.key === "End") nextIndex = tabs.length - 1;
+
+            tabs[nextIndex].click();
+            tabs[nextIndex].focus();
         }
 
         async function loadCharacterOptions() {
@@ -417,7 +449,7 @@
             statusBox.textContent = T.saving;
 
             try {
-                const response = await fetch(API_SAVE_TEMPLATE_URL, {
+                const response = await csrfFetch(API_SAVE_TEMPLATE_URL, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json"
@@ -451,7 +483,7 @@
             statusBox.classList.remove("error");
             statusBox.textContent = T.starting;
 
-            const response = await fetch(API_START_URL, {
+            const response = await csrfFetch(API_START_URL, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json"
@@ -497,7 +529,7 @@
                         statusBox.textContent = T.deleting;
 
                         try {
-                            const response = await fetch(templateDeleteUrl(template.id), {
+                            const response = await csrfFetch(templateDeleteUrl(template.id), {
                                 method: "POST",
                                 headers: {
                                     "Content-Type": "application/json"
@@ -577,6 +609,8 @@
         if (characterForm) {
             newCharacterTab.addEventListener("click", () => showTab("new"));
             templatesTab.addEventListener("click", () => showTab("templates"));
+            newCharacterTab.addEventListener("keydown", handleTabKeydown);
+            templatesTab.addEventListener("keydown", handleTabKeydown);
             characterName.addEventListener("input", updateTemplateButtonState);
             characterRace.addEventListener("change", updateTemplateButtonState);
             characterClass.addEventListener("change", updateTemplateButtonState);

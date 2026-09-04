@@ -1,0 +1,11 @@
+.git
+.venv
+.env
+__pycache__
+*.pyc
+*.sqlite3
+.coverage
+htmlcov
+evaluation/report.json
+monster_scrapping/*
+!monster_scrapping/monsters.json

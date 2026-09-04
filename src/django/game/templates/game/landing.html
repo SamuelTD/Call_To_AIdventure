@@ -3,6 +3,7 @@
 <html lang="{{ LANGUAGE_CODE }}">
 <head>
     <meta charset="UTF-8">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>Call To AIdventure</title>
     <style>
         body {
@@ -247,17 +248,17 @@
 
             {% if user.is_authenticated %}
                 <div class="save-tabs" role="tablist" aria-label="{% ui 'Saved games' %}">
-                    <button id="new-adventure-tab" class="tab-btn active" type="button">{% ui "New Adventure" %}</button>
-                    <button id="active-saves-tab" class="tab-btn" type="button">{% ui "Continue Adventure" %}</button>
-                    <button id="history-saves-tab" class="tab-btn" type="button">{% ui "History" %}</button>
+                    <button id="new-adventure-tab" class="tab-btn active" type="button" role="tab" aria-selected="true" aria-controls="new-adventure-panel">{% ui "New Adventure" %}</button>
+                    <button id="active-saves-tab" class="tab-btn" type="button" role="tab" aria-selected="false" aria-controls="active-saves-panel" tabindex="-1">{% ui "Continue Adventure" %}</button>
+                    <button id="history-saves-tab" class="tab-btn" type="button" role="tab" aria-selected="false" aria-controls="history-saves-panel" tabindex="-1">{% ui "History" %}</button>
                 </div>
 
-                <div id="active-saves-panel" class="hidden">
+                <div id="active-saves-panel" class="hidden" role="tabpanel" aria-labelledby="active-saves-tab">
                     <div id="saved-games" class="saved-games"></div>
-                    <div id="saved-games-empty" class="empty-saves hidden">{% ui "No saved games yet." %}</div>
+                    <div id="saved-games-empty" class="empty-saves hidden" aria-live="polite">{% ui "No saved games yet." %}</div>
                 </div>
 
-                <div id="new-adventure-panel">
+                <div id="new-adventure-panel" role="tabpanel" aria-labelledby="new-adventure-tab">
                     <label for="adventure-select">{% ui "Choose an adventure" %}</label>
                     <select id="adventure-select">
                         <option value="">{% ui "Loading adventures..." %}</option>
@@ -270,9 +271,9 @@
                     <button id="start-btn" class="hidden">{% ui "Start Adventure" %}</button>
                 </div>
 
-                <div id="history-saves-panel" class="hidden">
+                <div id="history-saves-panel" class="hidden" role="tabpanel" aria-labelledby="history-saves-tab">
                     <div id="history-games" class="saved-games"></div>
-                    <div id="history-games-empty" class="empty-saves hidden">{% ui "No finished adventures yet." %}</div>
+                    <div id="history-games-empty" class="empty-saves hidden" aria-live="polite">{% ui "No finished adventures yet." %}</div>
                 </div>
             {% else %}
                 <h2 class="section-title">{% ui "Start New Adventure" %}</h2>
@@ -288,7 +289,7 @@
                 <button id="start-btn" class="hidden">{% ui "Start Adventure" %}</button>
             {% endif %}
 
-            <div id="status" class="status"></div>
+            <div id="status" class="status" role="status" aria-live="polite" aria-atomic="true" tabindex="-1"></div>
         </div>
     </div>
 
@@ -308,6 +309,17 @@
         const API_SAVES_URL = "{% url 'api_saves' %}";
         const API_SAVE_LOAD_TEMPLATE = "{% url 'api_save_load' 0 %}";
         const API_SAVE_DELETE_TEMPLATE = "{% url 'api_save_delete' 0 %}";
+        const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').content;
+
+        function csrfFetch(url, options = {}) {
+            return fetch(url, {
+                ...options,
+                headers: {
+                    ...(options.headers || {}),
+                    "X-CSRFToken": CSRF_TOKEN
+                }
+            });
+        }
 
         const adventureSelect = document.getElementById("adventure-select");
         const introBox = document.getElementById("intro-box");
@@ -345,9 +357,31 @@
             activeSavesTab.classList.toggle("active", !showNewAdventure && !showHistory);
             newAdventureTab.classList.toggle("active", showNewAdventure);
             historySavesTab.classList.toggle("active", showHistory);
+            activeSavesTab.setAttribute("aria-selected", String(!showNewAdventure && !showHistory));
+            newAdventureTab.setAttribute("aria-selected", String(showNewAdventure));
+            historySavesTab.setAttribute("aria-selected", String(showHistory));
+            activeSavesTab.tabIndex = (!showNewAdventure && !showHistory) ? 0 : -1;
+            newAdventureTab.tabIndex = showNewAdventure ? 0 : -1;
+            historySavesTab.tabIndex = showHistory ? 0 : -1;
             activeSavesPanel.classList.toggle("hidden", showNewAdventure || showHistory);
             newAdventurePanel.classList.toggle("hidden", !showNewAdventure);
             historySavesPanel.classList.toggle("hidden", !showHistory);
+        }
+
+        function handleTabKeydown(event) {
+            const tabs = [newAdventureTab, activeSavesTab, historySavesTab].filter(Boolean);
+            const currentIndex = tabs.indexOf(event.currentTarget);
+            if (currentIndex < 0 || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+
+            event.preventDefault();
+            let nextIndex = currentIndex;
+            if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % tabs.length;
+            if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+            if (event.key === "Home") nextIndex = 0;
+            if (event.key === "End") nextIndex = tabs.length - 1;
+
+            tabs[nextIndex].click();
+            tabs[nextIndex].focus();
         }
 
         function renderSaveList(saves, container, emptyEl, allowContinue) {
@@ -440,7 +474,7 @@
             statusBox.textContent = T.loadingSave;
 
             try {
-                const response = await fetch(saveUrl(API_SAVE_LOAD_TEMPLATE, id), {
+                const response = await csrfFetch(saveUrl(API_SAVE_LOAD_TEMPLATE, id), {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json"
@@ -465,7 +499,7 @@
             statusBox.textContent = T.deletingSave;
 
             try {
-                const response = await fetch(saveUrl(API_SAVE_DELETE_TEMPLATE, id), {
+                const response = await csrfFetch(saveUrl(API_SAVE_DELETE_TEMPLATE, id), {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json"
@@ -537,6 +571,9 @@
             activeSavesTab.addEventListener("click", () => showSaveTab("active"));
             newAdventureTab.addEventListener("click", () => showSaveTab("new"));
             historySavesTab.addEventListener("click", () => showSaveTab("history"));
+            activeSavesTab.addEventListener("keydown", handleTabKeydown);
+            newAdventureTab.addEventListener("keydown", handleTabKeydown);
+            historySavesTab.addEventListener("keydown", handleTabKeydown);
         }
 
         loadAdventures();

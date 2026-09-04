@@ -1,0 +1,94 @@
+openapi: 3.0.3
+info:
+  title: Call To AIdventure Monster Dataset API
+  version: 1.0.0
+  description: Read access to the normalized monster dataset and staff access to ingestion summaries.
+paths:
+  /api/v1/monsters/:
+    get:
+      summary: List normalized monsters
+      parameters:
+        - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: page_size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: search, in: query, schema: {type: string}}
+        - {name: challenge_min, in: query, schema: {type: number}}
+        - {name: challenge_max, in: query, schema: {type: number}}
+        - name: ordering
+          in: query
+          schema: {type: string, enum: [name, -name, challenge_rating, -challenge_rating, hp, -hp, armor, -armor]}
+      responses:
+        '200':
+          description: Paginated result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonsterPage'
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '503': {$ref: '#/components/responses/DatasetUnavailable'}
+  /api/v1/monsters/{monster_id}/:
+    get:
+      summary: Retrieve a monster and its source provenance
+      parameters:
+        - {name: monster_id, in: path, required: true, schema: {type: integer}}
+      responses:
+        '200':
+          description: Monster detail
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Monster'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/DatasetUnavailable'}
+  /api/v1/ingestion-runs/{run_id}/summary/:
+    get:
+      summary: Retrieve an ingestion summary (staff session required)
+      security: [{cookieAuth: []}]
+      parameters:
+        - {name: run_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Ingestion counts and timestamps}
+        '401': {description: Authentication required}
+        '403': {description: Staff permission required}
+        '404': {$ref: '#/components/responses/NotFound'}
+components:
+  securitySchemes:
+    cookieAuth: {type: apiKey, in: cookie, name: sessionid}
+  responses:
+    InvalidRequest:
+      description: Invalid query parameter
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    NotFound:
+      description: Resource not found
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    DatasetUnavailable:
+      description: Dataset database has not been built
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties: {code: {type: string}, message: {type: string}}
+    Monster:
+      type: object
+      required: [id, stable_key, name, armor, hp]
+      properties:
+        id: {type: integer}
+        stable_key: {type: string}
+        name: {type: string}
+        armor: {type: integer}
+        hp: {type: integer}
+        challenge_rating: {type: number, nullable: true}
+        challenge_rating_raw: {type: string, nullable: true}
+        description: {type: string}
+        sources: {type: array, items: {type: object}}
+    MonsterPage:
+      type: object
+      required: [count, page, page_size, results]
+      properties:
+        count: {type: integer}
+        page: {type: integer}
+        page_size: {type: integer}
+        results: {type: array, items: {$ref: '#/components/schemas/Monster'}}

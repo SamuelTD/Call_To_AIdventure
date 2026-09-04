@@ -1,11 +1,10 @@
+from django.core.cache import cache
 from django.http import JsonResponse, HttpResponseBadRequest, Http404
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.views import View
 from django.views.generic import TemplateView
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import redirect, render
 from django.contrib.auth import login
 from django.contrib.auth.forms import UserCreationForm
@@ -34,6 +33,35 @@ from pathlib import Path
 # region HELPERS
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SYSTEM_TEMPLATE_USER_ID = -1
+
+
+def parse_json_body(request):
+    content_length = int(request.META.get("CONTENT_LENGTH") or 0)
+    if content_length > settings.MAX_JSON_BODY_BYTES:
+        return None, JsonResponse({"error": ui_text("Request body too large")}, status=413)
+
+    try:
+        return json.loads(request.body.decode("utf-8") or "{}"), None
+    except json.JSONDecodeError:
+        return None, HttpResponseBadRequest(ui_text("Invalid JSON"))
+
+
+def rate_limit_key(request, scope):
+    actor = f"user:{request.user.id}" if request.user.is_authenticated else f"session:{request.session.session_key or 'anonymous'}"
+    return f"rate-limit:{scope}:{actor}"
+
+
+def check_rate_limit(request, scope):
+    if not request.session.session_key:
+        request.session.create()
+
+    key = rate_limit_key(request, scope)
+    count = cache.get(key, 0)
+    if count >= settings.AI_RATE_LIMIT_REQUESTS:
+        return JsonResponse({"error": ui_text("Too many requests")}, status=429)
+
+    cache.set(key, count + 1, timeout=settings.AI_RATE_LIMIT_WINDOW_SECONDS)
+    return None
 
 
 def apply_request_language(request, state):
@@ -179,13 +207,11 @@ class DevAccountDashboardView(TemplateView):
 
         return redirect("dev_accounts")
 
-@method_decorator(csrf_exempt, name="dispatch")  # simple for now; we'll do proper CSRF/auth later
 class PlayView(View):
     def post(self, request):
-        try:
-            payload = json.loads(request.body.decode("utf-8") or "{}")
-        except json.JSONDecodeError:
-            return HttpResponseBadRequest(ui_text("Invalid JSON body"))
+        payload, error_response = parse_json_body(request)
+        if error_response:
+            return error_response
 
         user_input = (payload.get("input") or "").strip()
         session_id = payload.get("session_id")  # optional for now
@@ -197,15 +223,16 @@ class PlayView(View):
         return JsonResponse({"ok": True, "echo": user_input, "session_id": session_id})
 
 
-@method_decorator(csrf_exempt, name="dispatch")
 class StartGameView(View):
 
     def post(self, request):
+        rate_limited = check_rate_limit(request, "ai-start")
+        if rate_limited:
+            return rate_limited
 
-        try:
-            body = json.loads(request.body.decode("utf-8") or "{}")
-        except json.JSONDecodeError:
-            return HttpResponseBadRequest(ui_text("Invalid JSON"))
+        body, error_response = parse_json_body(request)
+        if error_response:
+            return error_response
 
         adventure_id = body.get("adventure_id")
         if not adventure_id:
@@ -249,15 +276,16 @@ class StartGameView(View):
             "choices": state["current_choices"],
         })
 
-@method_decorator(csrf_exempt, name="dispatch")
 class StepGameView(View):
 
     def post(self, request):
+        rate_limited = check_rate_limit(request, "ai-step")
+        if rate_limited:
+            return rate_limited
 
-        try:
-            body = json.loads(request.body.decode("utf-8"))
-        except json.JSONDecodeError:
-            return HttpResponseBadRequest(ui_text("Invalid JSON"))
+        body, error_response = parse_json_body(request)
+        if error_response:
+            return error_response
 
         choice = body.get("choice")
 
@@ -335,17 +363,15 @@ class StepGameView(View):
         })
 
 
-@method_decorator(csrf_exempt, name="dispatch")
 class StoryTurnMetricView(View):
     def post(self, request):
         serialized_state = request.session.get("game_state")
         if not serialized_state:
             return JsonResponse({"error": ui_text("No active game")}, status=400)
 
-        try:
-            body = json.loads(request.body.decode("utf-8") or "{}")
-        except json.JSONDecodeError:
-            return HttpResponseBadRequest(ui_text("Invalid JSON"))
+        body, error_response = parse_json_body(request)
+        if error_response:
+            return error_response
 
         duration_seconds = body.get("duration_seconds")
         if (
@@ -368,10 +394,13 @@ class StoryTurnMetricView(View):
 
         return JsonResponse({"ok": True})
 
-@method_decorator(csrf_exempt, name="dispatch")
 class CurrentRoomView(View):
 
     def post(self, request):
+        rate_limited = check_rate_limit(request, "ai-current-room")
+        if rate_limited:
+            return rate_limited
+
         serialized_state = request.session.get("game_state")
 
         if not serialized_state:
@@ -403,7 +432,6 @@ class CurrentRoomView(View):
             "current_room_name": build_current_room_name(result["state"]),
         })
 
-@method_decorator(csrf_exempt, name="dispatch")
 class StartCombatView(View):
 
     def post(self, request):
@@ -434,15 +462,13 @@ class StartCombatView(View):
         response_payload = {k: v for k, v in result.items() if k != "state"}
         return JsonResponse(response_payload)
         
-@method_decorator(csrf_exempt, name="dispatch")
 class CombatActionView(View):
 
     def post(self, request):
 
-        try:
-            body = json.loads(request.body.decode("utf-8"))
-        except json.JSONDecodeError:
-            return HttpResponseBadRequest(ui_text("Invalid JSON"))
+        body, error_response = parse_json_body(request)
+        if error_response:
+            return error_response
 
         action = body.get("action")
 
@@ -475,7 +501,6 @@ class CombatActionView(View):
 
         return JsonResponse(response_payload)
 
-@method_decorator(csrf_exempt, name="dispatch")
 class CombatStateView(View):
 
     def get(self, request):
@@ -590,16 +615,14 @@ class CharacterTemplateListView(View):
             ],
         })
 
-@method_decorator(csrf_exempt, name="dispatch")
 class CharacterTemplateSaveView(View):
     def post(self, request):
         if not request.user.is_authenticated:
             return JsonResponse({"error": ui_text("Login required")}, status=401)
 
-        try:
-            body = json.loads(request.body.decode("utf-8") or "{}")
-        except json.JSONDecodeError:
-            return HttpResponseBadRequest(ui_text("Invalid JSON"))
+        body, error_response = parse_json_body(request)
+        if error_response:
+            return error_response
 
         character = body.get("character") or {}
         try:
@@ -655,7 +678,6 @@ class CharacterTemplateSaveView(View):
             },
         })
 
-@method_decorator(csrf_exempt, name="dispatch")
 class CharacterTemplateDeleteView(View):
     def post(self, request, template_id):
         if not request.user.is_authenticated:
@@ -685,7 +707,6 @@ class SaveGameListView(View):
             "history": [build_save_game_payload(save) for save in history_saves],
         })
 
-@method_decorator(csrf_exempt, name="dispatch")
 class LoadSaveGameView(View):
     def post(self, request, save_game_id):
         if not request.user.is_authenticated:
@@ -712,7 +733,6 @@ class LoadSaveGameView(View):
             "redirect_url": redirect_url,
         })
 
-@method_decorator(csrf_exempt, name="dispatch")
 class DeleteSaveGameView(View):
     def post(self, request, save_game_id):
         if not request.user.is_authenticated:
@@ -734,7 +754,6 @@ class DeleteSaveGameView(View):
 class PlayPageView(TemplateView):
     template_name = "game/play.html"
     
-@method_decorator(csrf_exempt, name="dispatch")
 class CurrentGameStateView(View):
 
     def get(self, request):

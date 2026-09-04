@@ -11,7 +11,9 @@ from observability.metrics import (
     LLM_REQUEST_DURATION,
     LLM_REQUESTS,
     LLM_RETRIES,
+    LLM_STRUCTURED_OUTPUTS,
 )
+from pydantic import BaseModel, ValidationError
 
 
 class TemporaryLLMServiceError(Exception):
@@ -132,6 +134,8 @@ def invoke_llm_with_retries(
                 result = invoker(payload)
             except Exception as exc:
                 last_error = exc
+                if isinstance(exc, ValidationError):
+                    LLM_STRUCTURED_OUTPUTS.labels(operation=call_name, status="invalid").inc()
                 if not is_transient_llm_error(exc, config):
                     LLM_REQUESTS.labels(operation=call_name, status="error").inc()
                     raise
@@ -150,6 +154,8 @@ def invoke_llm_with_retries(
                     delay * config.backoff_multiplier,
                 )
             else:
+                if isinstance(result, BaseModel):
+                    LLM_STRUCTURED_OUTPUTS.labels(operation=call_name, status="valid").inc()
                 LLM_REQUESTS.labels(operation=call_name, status="success").inc()
                 return result
 
