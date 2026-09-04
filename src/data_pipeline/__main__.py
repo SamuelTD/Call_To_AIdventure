@@ -4,16 +4,23 @@ import argparse
 from pathlib import Path
 
 from .pipeline import run_pipeline
+from utils.pathing import PROJECT_ROOT
+
+
+DEFAULT_CURATED_PATH = PROJECT_ROOT / "data/documents/monsters.json"
+DEFAULT_SCRAPED_PATH = PROJECT_ROOT / "monster_scrapping/monsters.json"
+DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "data/pipeline/runs"
+DEFAULT_DB_PATH = PROJECT_ROOT / "db/sqlite/data.db"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Normalize, merge, and store the certification monster dataset."
     )
-    parser.add_argument("--curated", type=Path, default=Path("data/documents/monsters.json"))
-    parser.add_argument("--scraped", type=Path, default=Path("monster_scrapping/monsters.json"))
-    parser.add_argument("--output-dir", type=Path, default=Path("data/pipeline/runs"))
-    parser.add_argument("--db-path", type=Path, default=Path("db/sqlite/data.db"))
+    parser.add_argument("--curated", type=Path, default=DEFAULT_CURATED_PATH)
+    parser.add_argument("--scraped", type=Path, default=DEFAULT_SCRAPED_PATH)
+    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--db-path", type=Path, default=DEFAULT_DB_PATH)
     parser.add_argument("--no-database", action="store_true")
     return parser.parse_args()
 

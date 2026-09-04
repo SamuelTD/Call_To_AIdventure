@@ -12,6 +12,13 @@ if str(SRC_ROOT) not in sys.path:
 from data_pipeline.pipeline import run_pipeline  # noqa: E402
 
 
+DEFAULT_DB_PATH = PROJECT_ROOT / "db/sqlite/data.db"
+DEFAULT_MONSTERS_JSON = PROJECT_ROOT / "data/documents/monsters.json"
+DEFAULT_SCRAPED_MONSTERS_JSON = PROJECT_ROOT / "monster_scrapping/monsters.json"
+DEFAULT_PIPELINE_OUTPUT_DIR = PROJECT_ROOT / "data/pipeline/runs"
+DEFAULT_ADVENTURES_DIR = PROJECT_ROOT / "data/world/adventures"
+
+
 def create_schema(conn: sqlite3.Connection) -> None:
     """Create the adventure schema; the data pipeline owns monster tables."""
     conn.execute("""
@@ -41,7 +48,7 @@ def reset_schema(conn: sqlite3.Connection) -> None:
 
 def load_adventures(
     conn: sqlite3.Connection,
-    adventures_dir: str = "data/world/adventures",
+    adventures_dir: str | Path = DEFAULT_ADVENTURES_DIR,
 ) -> None:
     insert_sql = """
       INSERT OR REPLACE INTO adventures
@@ -81,27 +88,32 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--db-path",
-        default="db/sqlite/data.db",
+        type=Path,
+        default=DEFAULT_DB_PATH,
         help="SQLite database path.",
     )
     parser.add_argument(
         "--monsters-json",
-        default="data/documents/monsters.json",
+        type=Path,
+        default=DEFAULT_MONSTERS_JSON,
         help="Monster source JSON path.",
     )
     parser.add_argument(
         "--scraped-monsters-json",
-        default="monster_scrapping/monsters.json",
+        type=Path,
+        default=DEFAULT_SCRAPED_MONSTERS_JSON,
         help="Scraped monster source JSON path.",
     )
     parser.add_argument(
         "--pipeline-output-dir",
-        default="data/pipeline/runs",
+        type=Path,
+        default=DEFAULT_PIPELINE_OUTPUT_DIR,
         help="Directory for raw, clean, rejected and manifest outputs.",
     )
     parser.add_argument(
         "--adventures-dir",
-        default="data/world/adventures",
+        type=Path,
+        default=DEFAULT_ADVENTURES_DIR,
         help="Adventure source directory.",
     )
     parser.add_argument(
@@ -121,10 +133,10 @@ def main() -> None:
     load_adventures(conn, args.adventures_dir)
     conn.close()
     result = run_pipeline(
-        curated_path=Path(args.monsters_json),
-        scraped_path=Path(args.scraped_monsters_json),
-        output_dir=Path(args.pipeline_output_dir),
-        db_path=Path(args.db_path),
+        curated_path=args.monsters_json,
+        scraped_path=args.scraped_monsters_json,
+        output_dir=args.pipeline_output_dir,
+        db_path=args.db_path,
     )
     print(
         "Database created and game data loaded. "
