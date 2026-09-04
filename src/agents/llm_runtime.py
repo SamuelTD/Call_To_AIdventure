@@ -32,7 +32,7 @@ class LazyRuntimeObject:
         return self._factory()
 
     def __getattr__(self, name):
-        if name.startswith("__") and name.endswith("__"):
+        if name.startswith("_"):
             raise AttributeError(name)
         return getattr(self._target, name)
 

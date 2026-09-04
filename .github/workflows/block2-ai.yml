@@ -41,6 +41,7 @@ jobs:
           path: |
             evaluation/report.json
             .coverage
+          include-hidden-files: true
 
   container:
     needs: deterministic-quality
