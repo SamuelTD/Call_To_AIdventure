@@ -56,7 +56,16 @@ jobs:
           context: .
           load: true
           tags: call-to-aidventure:${{ github.sha }}
-      - run: docker run -d --name aidventure -p 8000:8000 call-to-aidventure:${{ github.sha }}
+      - run: |
+          docker run -d --name aidventure -p 8000:8000 \
+            --env DJANGO_DEBUG=false \
+            --env DJANGO_SECURE_SSL_REDIRECT=false \
+            --env DJANGO_SECRET_KEY=container-smoke-secret-key-02B6c513Ebf64f2bbE76Eed550a8b7d4 \
+            --env DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1 \
+            --env DJANGO_CSRF_TRUSTED_ORIGINS=http://localhost,http://127.0.0.1 \
+            --env RAG_ENABLED=false \
+            --env OPENAI_API_KEY=dummy-not-used-by-healthcheck \
+            call-to-aidventure:${{ github.sha }}
       - run: |
           for attempt in 1 2 3 4 5 6; do
             curl --fail http://127.0.0.1:8000/health && exit 0
