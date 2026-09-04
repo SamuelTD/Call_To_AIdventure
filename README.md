@@ -132,6 +132,23 @@ Rebuild game data after editing monsters or adventure JSON:
 uv run python db/sqlite/setup_db.py --reset
 ```
 
+The database build now runs the Block 1 certification pipeline across the
+scraped snapshot and curated monster source. It retains raw, cleaned, rejected,
+and manifest output under the ignored `data/pipeline/runs/` directory and stores
+record provenance in SQLite. See `docs/block1/data-pipeline.md` for schemas,
+normalization, conflict precedence, and offline scraper testing.
+
+The normalized dataset is publicly readable from:
+
+```text
+GET /api/v1/monsters/
+GET /api/v1/monsters/{id}/
+```
+
+Staff users can inspect ingestion summaries at
+`GET /api/v1/ingestion-runs/{run_id}/summary/`. The API contract is versioned in
+`docs/block1/openapi.yaml` and rendered at `GET /api/v1/docs/`.
+
 Create an admin user:
 
 ```bash
@@ -178,6 +195,8 @@ Optional LLM retry and timeout settings:
 
 Optional RAG settings:
 
+- `RAG_ENABLED`, default `true`; set to `false` to skip Ollama-backed RAG calls
+  and speed up gameplay when Ollama is not running
 - `OLLAMA_HOST`, default `http://localhost:11434`
 - `EMBED_MODEL`, default `mxbai-embed-large:latest`
 - `OLLAMA_KEY`, if your Ollama setup requires one

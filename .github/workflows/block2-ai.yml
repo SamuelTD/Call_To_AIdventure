@@ -1,0 +1,93 @@
+name: Block 2 AI component
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_live_evaluation:
+        description: Run budget-controlled live model evaluation
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  PYTHONPATH: src
+  DB_PATH: db/sqlite/data.db
+
+jobs:
+  deterministic-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: {enable-cache: true}
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: uv sync --frozen
+      - run: uv run python db/sqlite/setup_db.py --reset
+      - run: uv run ruff check src tests
+      - run: uv run python src/django/manage.py check
+      - run: uv run python -m retrieval.ingest --dry-run
+      - run: uv run python -m evaluation.runner --output evaluation/report.json
+      - run: uv run coverage run src/django/manage.py test game tests
+      - run: uv run coverage report
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deterministic-ai-evidence
+          path: |
+            evaluation/report.json
+            .coverage
+          include-hidden-files: true
+
+  container:
+    needs: deterministic-quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - run: docker run --rm --entrypoint /bin/promtool -v "$PWD/monitoring/prometheus:/etc/prometheus:ro" prom/prometheus:v3.5.0 check config /etc/prometheus/prometheus.yml
+      - run: docker run --rm --entrypoint /bin/amtool -v "$PWD/monitoring/alertmanager:/config:ro" prom/alertmanager:v0.28.1 check-config /config/alertmanager.yml
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: call-to-aidventure:${{ github.sha }}
+      - run: |
+          docker run -d --name aidventure -p 8000:8000 \
+            --env DJANGO_DEBUG=false \
+            --env DJANGO_SECURE_SSL_REDIRECT=false \
+            --env DJANGO_SECRET_KEY=container-smoke-secret-key-02B6c513Ebf64f2bbE76Eed550a8b7d4 \
+            --env DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1 \
+            --env DJANGO_CSRF_TRUSTED_ORIGINS=http://localhost,http://127.0.0.1 \
+            --env RAG_ENABLED=false \
+            --env OPENAI_API_KEY=dummy-not-used-by-healthcheck \
+            call-to-aidventure:${{ github.sha }}
+      - run: |
+          for attempt in 1 2 3 4 5 6; do
+            curl --fail http://127.0.0.1:8000/health && exit 0
+            sleep 5
+          done
+          docker logs aidventure
+          exit 1
+
+  live-evaluation:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_live_evaluation
+    needs: deterministic-quality
+    runs-on: ubuntu-latest
+    environment: ai-evaluation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - run: uv sync --frozen
+      - run: PYTHONPATH=src uv run python -m evaluation.runner --live --output evaluation/live-report.json
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+      - uses: actions/upload-artifact@v4
+        with: {name: live-ai-evaluation, path: evaluation/live-report.json}

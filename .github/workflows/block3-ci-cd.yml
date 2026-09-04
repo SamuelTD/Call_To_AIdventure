@@ -1,0 +1,144 @@
+name: Block 3 CI CD
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.12"
+  PYTHONPATH: src
+  DJANGO_DEBUG: "false"
+  DJANGO_SECURE_SSL_REDIRECT: "false"
+  DJANGO_SECRET_KEY: ci-secret-key-02B6c513Ebf64f2bbE76Eed550a8b7d4-not-production
+  DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+  DJANGO_CSRF_TRUSTED_ORIGINS: http://localhost,http://127.0.0.1
+  RAG_ENABLED: "false"
+  DB_PATH: db/sqlite/data.db
+
+jobs:
+  deterministic-quality-gate:
+    name: Deterministic quality gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install locked dependencies
+        run: uv sync --frozen --all-groups
+
+      - name: Build read-only game dataset
+        run: uv run python db/sqlite/setup_db.py --reset
+
+      - name: Lint Python
+        run: uv run ruff check src tests
+
+      - name: Check Django project
+        run: uv run python src/django/manage.py check --deploy
+
+      - name: Check migrations are committed
+        run: uv run python src/django/manage.py makemigrations --check --dry-run
+
+      - name: Run Django tests with coverage
+        run: uv run coverage run src/django/manage.py test game
+
+      - name: Enforce coverage threshold
+        run: uv run coverage report
+
+      - name: Validate RAG ingest without embeddings
+        run: uv run python -m retrieval.ingest --dry-run
+
+      - name: Upload coverage data
+        uses: actions/upload-artifact@v4
+        with:
+          name: block3-coverage
+          path: .coverage
+          include-hidden-files: true
+          if-no-files-found: error
+
+  container-artifact:
+    name: Build and smoke-test container artifact
+    runs-on: ubuntu-latest
+    needs: deterministic-quality-gate
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Compute image tag
+        id: image
+        run: echo "tag=call-to-aidventure:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Build immutable image
+        run: docker build --tag "${{ steps.image.outputs.tag }}" .
+
+      - name: Start image for smoke test
+        run: |
+          docker run --detach --rm \
+            --name call-to-aidventure-smoke \
+            --publish 8000:8000 \
+            --env DJANGO_DEBUG=false \
+            --env DJANGO_SECURE_SSL_REDIRECT=false \
+            --env DJANGO_SECRET_KEY=container-smoke-secret-key-02B6c513Ebf64f2bbE76Eed550a8b7d4 \
+            --env DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1 \
+            --env DJANGO_CSRF_TRUSTED_ORIGINS=http://localhost,http://127.0.0.1 \
+            --env RAG_ENABLED=false \
+            --env OPENAI_API_KEY=dummy-not-used-by-healthcheck \
+            "${{ steps.image.outputs.tag }}"
+
+      - name: Wait for health endpoint
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/health; then
+              exit 0
+            fi
+            docker logs call-to-aidventure-smoke || true
+            sleep 2
+          done
+          docker logs call-to-aidventure-smoke
+          exit 1
+
+      - name: Inspect smoke container
+        run: docker inspect call-to-aidventure-smoke
+
+      - name: Stop smoke container
+        if: always()
+        run: docker stop call-to-aidventure-smoke || true
+
+      - name: Save image as artifact
+        run: docker save "${{ steps.image.outputs.tag }}" --output call-to-aidventure-${GITHUB_SHA}.tar
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: call-to-aidventure-image-${{ github.sha }}
+          path: call-to-aidventure-${{ github.sha }}.tar
+          if-no-files-found: error
+
+  staging-deploy-placeholder:
+    name: Staging deployment gate
+    runs-on: ubuntu-latest
+    needs: container-artifact
+    if: github.event_name == 'workflow_dispatch'
+    environment:
+      name: staging
+    steps:
+      - name: Record promotion decision
+        run: |
+          echo "The SHA-built container passed deterministic and smoke checks."
+          echo "Configure the real staging deployment command for the selected hosting platform."

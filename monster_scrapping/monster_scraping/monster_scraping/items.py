@@ -7,7 +7,10 @@ import scrapy
 
 
 class MonsterItem(scrapy.Item):
-    
+    source = scrapy.Field()
+    source_record_id = scrapy.Field()
+    source_url = scrapy.Field()
+    collected_at = scrapy.Field()
     name = scrapy.Field()
     armor = scrapy.Field()
     HP = scrapy.Field()

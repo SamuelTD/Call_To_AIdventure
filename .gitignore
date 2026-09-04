@@ -208,7 +208,16 @@ __marimo__/
 
 db/chroma/
 db/sqlite/data.db
+data/pipeline/runs/
+data/exports/
 training/
 
 *.pyc
-uv.lock
+# The dependency lock is delivery evidence and must be committed.
+
+# Certification source PDFs and other working files stay local; the maintained
+# Block 2 analysis is intentionally versioned.
+certif/*
+rapports/
+evaluation/report.json
+scripts/

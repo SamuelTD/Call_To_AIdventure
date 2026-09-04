@@ -13,9 +13,7 @@ setup(
     packages=find_packages(where="src"),
     python_requires=">=3.7",
     install_requires=[
-        "gradio",
         "chromadb",
-        "transformers",
         "langchain",
         "langchain-community",
         "langchain-core",

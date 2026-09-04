@@ -6,6 +6,7 @@
 <html lang="{{ LANGUAGE_CODE }}">
 <head>
     <meta charset="UTF-8">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>{% ui "Combat" %} - Call To AIdventure</title>
     <style>
         body {
@@ -199,7 +200,7 @@
         <div class="layout">
             <div class="panel">
                 <div id="combat-fluff" class="combat-fluff hidden"></div>
-                <div id="combat-log" class="combat-log">{% ui "Loading combat..." %}</div>
+                <div id="combat-log" class="combat-log" tabindex="-1" aria-live="polite" aria-atomic="true">{% ui "Loading combat..." %}</div>
 
                 <form id="combat-form">
                     <div id="combat-choices"></div>
@@ -214,7 +215,7 @@
                 <div id="victory-box" class="victory-box hidden">{% ui "Victory" %} !</div>
                 <div id="defeat-box" class="defeat-box hidden">{% ui "You were defeated." %}</div>
 
-                <div id="status" class="status"></div>
+                <div id="status" class="status" role="status" aria-live="polite" aria-atomic="true" tabindex="-1"></div>
             </div>
 
             <div class="panel">
@@ -227,14 +228,14 @@
                 <div class="hp-block">
                     <div class="hp-label">{% ui "Player HP" %}: <span id="player-hp-text"></span></div>
                     <div class="hp-bar-wrap">
-                        <div id="player-hp-bar" class="hp-bar"></div>
+                        <div id="player-hp-bar" class="hp-bar" role="progressbar" aria-label="{% ui 'Player HP' %}" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
                     </div>
                 </div>
 
                 <div class="hp-block">
                     <div class="hp-label">{% ui "Enemy HP" %}: <span id="monster-hp-text"></span></div>
                     <div class="hp-bar-wrap">
-                        <div id="monster-hp-bar" class="hp-bar"></div>
+                        <div id="monster-hp-bar" class="hp-bar" role="progressbar" aria-label="{% ui 'Enemy HP' %}" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></div>
                     </div>
                 </div>
 
@@ -266,6 +267,17 @@
         const API_STEP_URL = "{% url 'api_step' %}";
         const PLAY_URL = "{% url 'play' %}";
         const MONSTER_STATIC_BASE = "{% static 'game/monster_pictures/' %}";
+        const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').content;
+
+        function csrfFetch(url, options = {}) {
+            return fetch(url, {
+                ...options,
+                headers: {
+                    ...(options.headers || {}),
+                    "X-CSRFToken": CSRF_TOKEN
+                }
+            });
+        }
 
         const combatTitle = document.getElementById("combat-title");
         const combatFluff = document.getElementById("combat-fluff");
@@ -299,6 +311,8 @@
             const safeMax = max || 1;
             const pct = Math.max(0, Math.min(100, (current / safeMax) * 100));
             barEl.style.width = `${pct}%`;
+            barEl.setAttribute("aria-valuemax", String(max || 0));
+            barEl.setAttribute("aria-valuenow", String(current || 0));
         }
 
         function renderChoices(choices) {
@@ -405,7 +419,7 @@
             statusBox.textContent = T.starting;
 
             try {
-                const response = await fetch(API_COMBAT_START_URL, {
+                const response = await csrfFetch(API_COMBAT_START_URL, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json"
@@ -421,6 +435,7 @@
                 renderCombatState(data);
                 renderChoices(data.choices || []);
                 combatLog.textContent = data.combat_log || "";
+                combatLog.focus({ preventScroll: true });
                 statusBox.textContent = "";
             } catch (err) {
                 console.error(err);
@@ -444,7 +459,7 @@
             combatBtn.disabled = true;
 
             try {
-                const response = await fetch(API_COMBAT_ACTION_URL, {
+                const response = await csrfFetch(API_COMBAT_ACTION_URL, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json"
@@ -463,6 +478,7 @@
                 renderCombatState(data);
                 renderPlayer(data.player);
                 combatLog.textContent = data.combat_log || "";
+                combatLog.focus({ preventScroll: true });
 
                 if (data.mode === "combat") {
                     renderChoices(data.choices || []);
@@ -505,7 +521,7 @@
             statusBox.textContent = T.returning;
 
             try {
-                const response = await fetch(API_STEP_URL, {
+                const response = await csrfFetch(API_STEP_URL, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json"

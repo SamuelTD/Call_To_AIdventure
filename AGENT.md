@@ -41,7 +41,7 @@ Data loading is mostly SQLite plus JSON files:
 - `src/utils/monster.py` reads monsters from SQLite.
 - `src/utils/player.py` reads the default player from `data/world/other/player.json`.
 
-There is a retrieval subsystem under `src/retrieval` using ChromaDB and Ollama embeddings. It appears to support RAG ingestion/querying of world documents, but it is not currently wired into the Django game flow.
+The retrieval subsystem under `src/retrieval` uses ChromaDB and Ollama embeddings. It is wired into the active LangGraph for scoped choice, room, combat-fluff, and story context. Retrieval failures degrade to empty lore rather than stopping the game.
 
 ## Runtime Flow
 
@@ -120,7 +120,7 @@ The combat page maps monster names to filenames by replacing spaces with undersc
 - Django session state is the active persistence path for anonymous play.
 - `SaveGame` exists and is used only when `request.user` is authenticated during game initialization.
 - `PlayView` at `/api/play` is currently just an echo/debug endpoint, not the real game step path.
-- The retrieval/RAG code is available but not currently part of story generation.
+- The retrieval/RAG code is part of active story generation; preserve its adventure scope and graceful-empty behavior.
 - Some setup notes are stale or minimal; prefer the actual Django flow over `setup.md` when they disagree.
 
 ## Testing And Verification
