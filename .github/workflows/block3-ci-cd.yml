@@ -12,6 +12,7 @@ env:
   PYTHON_VERSION: "3.12"
   PYTHONPATH: src
   DJANGO_DEBUG: "false"
+  DJANGO_SECURE_SSL_REDIRECT: "false"
   DJANGO_SECRET_KEY: ci-secret-key-02B6c513Ebf64f2bbE76Eed550a8b7d4-not-production
   DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
   DJANGO_CSRF_TRUSTED_ORIGINS: http://localhost,http://127.0.0.1

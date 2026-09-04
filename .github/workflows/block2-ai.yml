@@ -14,6 +14,10 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONPATH: src
+  DB_PATH: db/sqlite/data.db
+
 jobs:
   deterministic-quality:
     runs-on: ubuntu-latest
@@ -24,10 +28,11 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: '3.12'}
       - run: uv sync --frozen
+      - run: uv run python db/sqlite/setup_db.py --reset
       - run: uv run ruff check src tests
       - run: uv run python src/django/manage.py check
-      - run: PYTHONPATH=src uv run python -m retrieval.ingest --dry-run
-      - run: PYTHONPATH=src uv run python -m evaluation.runner --output evaluation/report.json
+      - run: uv run python -m retrieval.ingest --dry-run
+      - run: uv run python -m evaluation.runner --output evaluation/report.json
       - run: uv run coverage run src/django/manage.py test game tests
       - run: uv run coverage report
       - uses: actions/upload-artifact@v4
