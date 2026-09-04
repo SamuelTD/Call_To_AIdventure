@@ -3,13 +3,13 @@ from pydantic import Field
 from utils.serialization import SerializableModel
 import json
 import sqlite3
-import os
 from dotenv import load_dotenv
 from pathlib import Path
+from utils.pathing import env_project_path
 
 load_dotenv()
 ROOT_DIR = Path(__file__).resolve().parents[2]
-file_path = ROOT_DIR / os.getenv("DB_PATH")
+file_path = env_project_path("DB_PATH", "db/sqlite/data.db")
 
 
 class AdventureCharacters(SerializableModel):
