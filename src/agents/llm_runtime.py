@@ -32,6 +32,8 @@ class LazyRuntimeObject:
         return self._factory()
 
     def __getattr__(self, name):
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(name)
         return getattr(self._target, name)
 
     def invoke(self, *args, **kwargs):
