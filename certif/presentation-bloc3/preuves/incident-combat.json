@@ -1,0 +1,21 @@
+{
+  "generated_at": "2026-09-14T10:00:42.428773+00:00",
+  "historical_fix_commit": "8a3cf39702a0920582862904c28ce65f74a545cf",
+  "current_revision": "a79321ed8b0a0a945901fd92fef9ece64ea0c48d",
+  "scenario": "Restore A; restore B; resume the attack initiated for A with fixed damage 3.",
+  "initial_hp": {
+    "monster_A_hp": 8,
+    "monster_B_hp": 8
+  },
+  "historical_result": {
+    "monster_A_hp": 8,
+    "monster_B_hp": 5
+  },
+  "current_result": {
+    "monster_A_hp": 5,
+    "monster_B_hp": 8
+  },
+  "historical_bug_reproduced": true,
+  "current_isolation_verified": true,
+  "limits": "Deterministic interleaving of core functions, not a threaded HTTP load test or evidence of a production incident."
+}

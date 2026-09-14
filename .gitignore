@@ -217,7 +217,7 @@ training/
 
 # Certification source PDFs and other working files stay local; the maintained
 # Block 2 analysis is intentionally versioned.
-certif/*
+
 rapports/
 evaluation/report.json
 scripts/
